@@ -372,12 +372,32 @@ body { font-family: 'Noto Sans TC', sans-serif; background: var(--gray-50); colo
 .hidden { display: none !important; }
 .divider { height: 1px; background: var(--gray-100); margin: 16px 0; }
 .mb12 { margin-bottom: 12px; }
+
+/* LOADING SCREEN */
+#loading-screen {
+  position: fixed; inset: 0; background: #fff; z-index: 99999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+}
+.loading-spinner {
+  width: 48px; height: 48px; border: 4px solid var(--gray-200);
+  border-top-color: var(--green); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 
+<!-- LOADING -->
+<div id="loading-screen">
+  <div style="font-size:48px">🦁</div>
+  <div class="loading-spinner"></div>
+  <div style="font-size:14px;color:var(--gray-500);font-weight:500">Co-Dare 口袋營養獅</div>
+  <div style="font-size:12px;color:var(--gray-400)">資料載入中，請稍候…</div>
+</div>
+
 <!-- LOGIN -->
-<div id="login-screen">
+<div id="login-screen" style="display:none">
   <div class="login-logo">🦁</div>
   <div class="login-brand">Co-Dare 口袋營養獅</div>
   <div class="login-sub">學員專屬平台</div>
@@ -573,7 +593,9 @@ async function doLogin() {
     document.getElementById('login-error').style.display = 'none';
     if (keep) localStorage.setItem('cd_autologin', JSON.stringify({ id, pw }));
     else localStorage.removeItem('cd_autologin');
-    // Warm cache from Firebase before launching
+    // Show loading while warming cache
+    document.getElementById('loading-screen').style.display = 'flex';
+    document.getElementById('login-screen').style.display = 'none';
     await warmCache(id);
     launchApp();
   } else {
@@ -587,11 +609,11 @@ function launchApp() {
   COURSE_DATES.length = 0;
   buildCourseDates(startDate, endDate).forEach(d => COURSE_DATES.push(d));
 
+  document.getElementById('loading-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('topbar-name').textContent = currentUser.name + ' 學員';
 
-  // Start Firebase realtime sync — no re-login needed when data updates
   startRealtimeSync(currentUser.id);
 
   showPage('home');
@@ -618,15 +640,20 @@ function doLogout() {
     try {
       const saved = JSON.parse(localStorage.getItem('cd_autologin'));
       if (saved && saved.id && saved.pw) {
+        // Keep loading screen visible while checking
         const u = await findUser(saved.id, saved.pw);
         if (u) {
           currentUser = u;
           await warmCache(saved.id);
           launchApp();
+          return;
         }
       }
     } catch(e) {}
-  }, 500); // slight delay to let Firebase initialize
+    // No valid auto-login → hide loading, show login screen
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  }, 500);
 })();
 
 // ══════════ NAV ══════════
@@ -634,7 +661,7 @@ function showPage(page) {
   currentPage = page;
   currentFoodDay = null;
   currentProgressWeek = null;
-  ['home','food','body','goals','menu','materials'].forEach(p => {
+  ['home','food','body','goals','menu','materials','inbox'].forEach(p => {
     const el = document.getElementById('nav-' + p);
     if (el) el.classList.toggle('active', p === page);
   });
@@ -997,14 +1024,21 @@ function notifyRD(day) {
 
 // ── BODY DATA ──
 function renderBody() {
-  const prog = gs(`progress_${currentUser.id}`) || JSON.parse(JSON.stringify(DEFAULT_PROGRESS));
-  const w1 = prog[0].weight;
+  const wGroups = buildWeekGroups(COURSE_DATES);
+  const totalWeeks = wGroups.length || 1;
+
+  const savedProg = gs(`progress_${currentUser.id}`) || [];
+  const prog = Array.from({ length: totalWeeks }, (_, i) =>
+    savedProg[i] || { week: `W${i+1}`, weight: null, fat: null, waist: null, muscle: null }
+  );
+
+  const w1 = prog[0]?.weight;
   const latest = [...prog].reverse().find(p => p.weight);
   const change = (w1 && latest && latest !== prog[0]) ? (latest.weight - w1).toFixed(1) : null;
 
   const rows = prog.map((p, i) => `
-    <tr ${i === 0 ? 'class="current-week"' : ''}>
-      <td style="font-weight:700;color:var(--gray-700)">${p.week}</td>
+    <tr>
+      <td style="font-weight:700;color:var(--gray-700)">W${i+1}</td>
       <td><input type="number" inputmode="decimal" step="0.1" value="${p.weight || ''}" placeholder="--" data-pi="${i}" data-pf="weight" oninput="updateProg(this)"></td>
       <td><input type="number" inputmode="decimal" step="0.1" value="${p.fat || ''}" placeholder="--" data-pi="${i}" data-pf="fat" oninput="updateProg(this)"></td>
       <td><input type="number" inputmode="decimal" step="0.1" value="${p.waist || ''}" placeholder="--" data-pi="${i}" data-pf="waist" oninput="updateProg(this)"></td>
@@ -1042,13 +1076,12 @@ function renderBody() {
   <div class="card" style="margin-top:4px">
     <div class="card-title">📊 營養師每週進度確認</div>
     ${prog.map((p, i) => {
-      const plan = gs(`wplan_${currentUser.id}_${i+1}`) || DEFAULT_WEEKLY_PLANS[i+1] || {};
-      const hasData = p.weight || plan.calories;
+      const plan = gs(`wplan_${currentUser.id}_${i+1}`) || {};
       return `
     <div class="progress-item" onclick="openProgressDetail(${i+1})" style="cursor:pointer">
       <div class="progress-week ${p.weight ? 'done' : ''}">${i+1}</div>
       <div style="flex:1">
-        <div style="font-size:15px;font-weight:700">${p.week} 體重：${p.weight ? p.weight + 'kg' : '尚未紀錄'}</div>
+        <div style="font-size:15px;font-weight:700">W${i+1} 體重：${p.weight ? p.weight + 'kg' : '尚未紀錄'}</div>
         <div style="font-size:12px;color:var(--gray-500);">${plan.calories ? '熱量設定：'+plan.calories : '點擊查看本週計畫'}</div>
       </div>
       <div style="color:var(--gray-400);font-size:18px">›</div>
@@ -1060,7 +1093,12 @@ function renderBody() {
 function updateProg(el) {
   const i = parseInt(el.dataset.pi);
   const f = el.dataset.pf;
-  const prog = gs(`progress_${currentUser.id}`) || JSON.parse(JSON.stringify(DEFAULT_PROGRESS));
+  const wGroups = buildWeekGroups(COURSE_DATES);
+  const totalWeeks = wGroups.length || 1;
+  const savedProg = gs(`progress_${currentUser.id}`) || [];
+  const prog = Array.from({ length: totalWeeks }, (_, j) =>
+    savedProg[j] || { week: `W${j+1}`, weight: null, fat: null, waist: null, muscle: null }
+  );
   prog[i][f] = el.value ? parseFloat(el.value) : null;
   ss(`progress_${currentUser.id}`, prog);
 }
