@@ -71,34 +71,50 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：從 Supabase 同步學員資料（包含營養師回覆、菜單、教材）──
+// ── warmCache：從 Supabase 分批同步學員資料 ──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
 
-  // 一次抓全部資料，前端過濾（最穩定，不依賴複雜 filter 語法）
-  const res = await Promise.race([
-    fetch(`${SB_URL}/rest/v1/cd?select=key,value&limit=2000`, { headers: SB_HDRS }),
-    new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 6000))
-  ]);
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`HTTP ${res.status}: ${t}`);
-  }
-  const rows = await res.json();
-
-  // 只保留跟這個學員相關的 key
-  const relevant = [
-    `food_${userId}`, `dynuser_${userId}`, `intake_${userId}`,
-    `progress_${userId}`, `inbox_${userId}`, `goals_${userId}`,
-    `daily_goals_${userId}`, `wplan_${userId}`, `menus_${userId}`,
-    `ency_${userId}`, `body_notif_${userId}`, `btNote_${userId}`
+  // 用 Supabase 的 or filter，單一請求抓所有相關 key
+  // 格式：key=like.prefix%  用逗號分隔多個條件放進 or()
+  const prefixes = [
+    `food_${userId}`,
+    `dynuser_${userId}`,
+    `intake_${userId}`,
+    `progress_${userId}`,
+    `inbox_${userId}`,
+    `goals_${userId}`,
+    `daily_goals_${userId}`,
+    `wplan_${userId}`,
+    `menus_${userId}`,
+    `ency_${userId}`,
+    `body_notif_${userId}`,
+    `btNote_${userId}`
   ];
-  rows.forEach(({ key, value }) => {
-    if (relevant.some(p => key.startsWith(p))) {
-      _cache[key] = value;
-      try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
-    }
+
+  // 分兩批，每批 6 個 prefix，避免 URL 太長或 timeout
+  const batch = async (ps) => {
+    // Supabase or() filter: key.like.prefix% — % 不能 encode，否則變成 %25 會查不到
+    const orFilter = ps.map(p => `key.like.${p}%`).join(',');
+    const url = `${SB_URL}/rest/v1/cd?or=(${orFilter})&select=key,value&limit=500`;
+    const res = await Promise.race([
+      fetch(url, { headers: SB_HDRS }),
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 7000))
+    ]);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    return res.json();
+  };
+
+  const half = Math.ceil(prefixes.length / 2);
+  const [r1, r2] = await Promise.all([
+    batch(prefixes.slice(0, half)),
+    batch(prefixes.slice(half))
+  ]);
+
+  [...r1, ...r2].forEach(({ key, value }) => {
+    _cache[key] = value;
+    try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
   });
 }
 
@@ -611,17 +627,27 @@ function togglePw() {
 }
 
 async function findUser(id, pw) {
+  // 1. 靜態測試帳號
   if (USERS[id] && USERS[id].password === pw) return { ...USERS[id], id };
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/cd?key=eq.dynuser_${id}&select=value`, { headers: SB_HDRS });
-    if (res.ok) {
-      const rows = await res.json();
-      if (rows[0]?.value?.password === pw) return { ...rows[0].value, id };
-    }
-  } catch(e) {}
+  // 2. localStorage 快取（最快，已有資料就不用等 Supabase）
   try {
     const dyn = JSON.parse(localStorage.getItem('cd_dynuser_' + id));
     if (dyn && dyn.password === pw) return { ...dyn, id };
+  } catch(e) {}
+  // 3. 查 Supabase（第一次登入或快取沒有時）
+  try {
+    const res = await Promise.race([
+      fetch(`${SB_URL}/rest/v1/cd?key=eq.dynuser_${encodeURIComponent(id)}&select=value`, { headers: SB_HDRS }),
+      new Promise((_, r) => setTimeout(() => r(new Error('t')), 3000))
+    ]);
+    if (res.ok) {
+      const rows = await res.json();
+      if (rows[0]?.value?.password === pw) {
+        // 寫入 localStorage 供下次快速登入
+        try { localStorage.setItem('cd_dynuser_' + id, JSON.stringify(rows[0].value)); } catch(e) {}
+        return { ...rows[0].value, id };
+      }
+    }
   } catch(e) {}
   return null;
 }
@@ -639,11 +665,20 @@ async function doLogin() {
     document.getElementById('login-error').style.display = 'none';
     if (keep) localStorage.setItem('cd_autologin', JSON.stringify({ id, pw }));
     else localStorage.removeItem('cd_autologin');
-    // 從 Supabase 同步此學員最新資料（跨裝置）
-    try { await warmCache(id); } catch(e) { preloadLocalCache(); }
+    // 立即啟動 App，背景同步（不讓使用者等待）
+    preloadLocalCache();
     document.getElementById('loading-screen').style.display = 'none';
     document.getElementById('login-screen').style.display = 'none';
     launchApp();
+    // 背景同步 Supabase，完成後靜默更新畫面
+    setTimeout(async () => {
+      try {
+        await warmCache(id);
+        // 靜默刷新當前頁
+        if (document.getElementById('main-content')) renderPage();
+        updateInboxBadge();
+      } catch(e) {}
+    }, 400);
   } else {
     document.getElementById('login-error').style.display = 'block';
   }
@@ -689,17 +724,24 @@ function doLogout() {
         const u = await findUser(saved.id, saved.pw);
         if (u) {
           currentUser = u;
-          // 從 Supabase 同步此學員最新資料（跨裝置）
-          try { await warmCache(saved.id); } catch(e) { preloadLocalCache(); }
+          // 立即啟動，背景同步
+          preloadLocalCache();
           document.getElementById('loading-screen').style.display = 'none';
           launchApp();
+          setTimeout(async () => {
+            try {
+              await warmCache(saved.id);
+              if (document.getElementById('main-content')) renderPage();
+              updateInboxBadge();
+            } catch(e) {}
+          }, 400);
           return;
         }
       }
     } catch(e) {}
     document.getElementById('loading-screen').style.display = 'none';
     document.getElementById('login-screen').style.display = 'flex';
-  }, 300);  // reduced from 500ms
+  }, 200);
 })();
 
 // ══════════ NAV ══════════
