@@ -45,20 +45,58 @@ function ss(key, val) {
   }
 }
 async function warmCache(userId) {
+  preloadLocalCache();   // 立刻從 localStorage 載入（< 0.1 秒）
   if (!_db) return;
   try {
-    const snap = await _db.ref('cd').orderByKey().once('value');
-    if (snap.exists()) {
+    const snap = await Promise.race([
+      _db.ref('cd').orderByKey().once('value'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+    ]);
+    if (snap && snap.exists()) {
       snap.forEach(child => {
         const k = child.key.replace(/_sl_/g, '/');
         _cache[k] = child.val();
         try { localStorage.setItem('cd_' + k, JSON.stringify(child.val())); } catch {}
       });
     }
-    console.log('✅ 資料同步完成');
   } catch(e) {
-    console.warn('Cache warm failed, using localStorage:', e);
+    console.warn('Firebase sync failed, using localStorage:', e.message);
   }
+}
+
+function preloadLocalCache() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('cd_')) {
+        const k = key.slice(3);
+        if (_cache[k] === undefined) {
+          try { _cache[k] = JSON.parse(localStorage.getItem(key)); } catch {}
+        }
+      }
+    }
+  } catch(e) {}
+}
+
+function bgSyncClient(userId) {
+  if (!_db || !userId) return;
+  setTimeout(async () => {
+    try {
+      const snap = await _db.ref('cd').orderByKey().once('value');
+      if (!snap.exists()) return;
+      let changed = false;
+      snap.forEach(child => {
+        const k = child.key.replace(/_sl_/g, '/');
+        const newVal = child.val();
+        if (JSON.stringify(newVal) !== JSON.stringify(_cache[k])) {
+          _cache[k] = newVal;
+          try { localStorage.setItem('cd_' + k, JSON.stringify(newVal)); } catch {}
+          changed = true;
+        }
+      });
+      if (changed) { updateInboxBadge(); }
+    } catch(e) {}
+  }, 200);
 }
 
 // ── Firebase realtime listener — no re-login needed ──
@@ -433,7 +471,7 @@ body { font-family: 'Noto Sans TC', sans-serif; background: var(--gray-50); colo
     <div class="topbar-brand">🦁 Co-Dare</div>
     <div class="topbar-user">
       <span class="topbar-name" id="topbar-name"></span>
-      <button onclick="syncClientData()" style="background:none;border:none;font-size:18px;cursor:pointer;padding:4px 2px;color:var(--green)" title="同步資料">🔄</button>
+      <button onclick="syncClientData()" style="background:none;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;padding:5px 10px;color:var(--green);font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px;font-family:inherit" title="同步資料">🔄 同步資料</button>
       <button class="btn-logout" onclick="doLogout()">登出</button>
     </div>
   </div>
@@ -594,11 +632,13 @@ async function doLogin() {
     document.getElementById('login-error').style.display = 'none';
     if (keep) localStorage.setItem('cd_autologin', JSON.stringify({ id, pw }));
     else localStorage.removeItem('cd_autologin');
-    // Show loading while warming cache
-    document.getElementById('loading-screen').style.display = 'flex';
+    // Preload localStorage instantly, launch UI immediately
+    preloadLocalCache();
+    document.getElementById('loading-screen').style.display = 'none';
     document.getElementById('login-screen').style.display = 'none';
-    await warmCache(id);
     launchApp();
+    // Sync Firebase in background
+    bgSyncClient(id);
   } else {
     document.getElementById('login-error').style.display = 'block';
   }
@@ -641,20 +681,20 @@ function doLogout() {
     try {
       const saved = JSON.parse(localStorage.getItem('cd_autologin'));
       if (saved && saved.id && saved.pw) {
-        // Keep loading screen visible while checking
         const u = await findUser(saved.id, saved.pw);
         if (u) {
           currentUser = u;
-          await warmCache(saved.id);
+          preloadLocalCache();  // instant
+          document.getElementById('loading-screen').style.display = 'none';
           launchApp();
+          bgSyncClient(saved.id);  // Firebase in background
           return;
         }
       }
     } catch(e) {}
-    // No valid auto-login → hide loading, show login screen
     document.getElementById('loading-screen').style.display = 'none';
     document.getElementById('login-screen').style.display = 'flex';
-  }, 500);
+  }, 300);  // reduced from 500ms
 })();
 
 // ══════════ NAV ══════════
@@ -691,15 +731,15 @@ function renderPage() {
 // ── HOME ──
 async function syncClientData() {
   const btn = document.querySelector('[onclick="syncClientData()"]');
-  if (btn) { btn.style.animation = 'spin 0.8s linear infinite'; btn.style.display = 'inline-block'; }
+  if (btn) btn.style.opacity = '0.5';
   try {
     await warmCache(currentUser.id);
-    if (btn) btn.style.animation = '';
+    if (btn) btn.style.opacity = '';
     showToast('✅ 資料已同步！');
     document.getElementById('main-content').innerHTML = renderHome();
     updateInboxBadge();
   } catch(e) {
-    if (btn) btn.style.animation = '';
+    if (btn) btn.style.opacity = '';
     showToast('⚠️ 同步失敗，請檢查網路');
   }
 }
