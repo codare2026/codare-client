@@ -1498,10 +1498,21 @@ function renderMaterials() {
     const clickHandler = hasLink
       ? `onclick="window.open('${uploaded.linkUrl}','_blank')"`
       : hasFile ? `onclick="openEncyPreview_course(${c.num - 1})"` : `onclick="showToast('課程影片即將上線，敬請期待！')"`;
-    return `<div class="course-item" ${clickHandler}>
-      <div class="course-num">${c.num}</div>
-      <div class="course-title">線上課程 ${c.num}｜${c.title}</div>
-      <div class="course-arrow" style="color:${isClickable ? 'var(--green)' : 'var(--gray-300)'}">${isClickable ? '▶' : '›'}</div>
+
+    // 狀態 badge
+    const statusBadge = hasLink
+      ? `<span style="background:var(--green);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">▶ 可觀看</span>`
+      : hasFile
+      ? `<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">▶ 可觀看</span>`
+      : `<span style="background:var(--gray-200);color:var(--gray-400);font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">即將上線</span>`;
+
+    return `<div class="course-item" ${clickHandler} style="cursor:${isClickable?'pointer':'default'};${isClickable?'background:linear-gradient(135deg,#f0fdf4,#fff);border-left:3px solid var(--green);':''}">
+      <div class="course-num" style="background:${isClickable?'var(--green)':'var(--gray-200)'};color:${isClickable?'#fff':'var(--gray-400)'};">${c.num}</div>
+      <div style="flex:1;min-width:0">
+        <div class="course-title" style="color:${isClickable?'var(--gray-800)':'var(--gray-400)'}">線上課程 ${c.num}｜${c.title}</div>
+        <div style="margin-top:4px">${statusBadge}</div>
+      </div>
+      <div style="font-size:20px;color:${isClickable?'var(--green)':'var(--gray-300)'}">›</div>
     </div>`;
   }).join('');
 
@@ -1550,9 +1561,10 @@ function renderMaterials() {
           <div style="font-size:10px;color:var(--gray-600);text-align:center;padding:0 6px;word-break:break-all">${item.fileName || 'PDF'}</div>
         </div>`;
       } else if (item.fileType === 'link' && item.linkUrl) {
-        return `<div onclick="window.open('${item.linkUrl}','_blank')" style="cursor:pointer;border-radius:10px;background:${cat ? cat.color : '#f0fdf4'};border:1.5px solid ${cat ? cat.border : '#22c55e'};aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px">
-          <div style="font-size:28px">🔗</div>
-          <div style="font-size:10px;color:var(--gray-600);text-align:center;line-height:1.4">${item.title}</div>
+        return `<div onclick="window.open('${item.linkUrl}','_blank')" style="cursor:pointer;border-radius:10px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid var(--green);aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;position:relative">
+          <div style="font-size:28px">▶️</div>
+          <div style="font-size:10px;color:var(--gray-700);text-align:center;line-height:1.4;font-weight:600">${item.title}</div>
+          <div style="position:absolute;top:5px;right:5px;background:var(--green);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">可看</div>
         </div>`;
       }
       return '';
