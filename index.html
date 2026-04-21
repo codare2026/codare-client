@@ -75,34 +75,38 @@ function preloadLocalCache() {
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
-  try {
-    // 分兩批抓：①學員自己的資料 ②營養師寫給這個學員的 food 回覆
-    // 用 gte/lte 配合 key prefix 是最穩定的 Supabase REST 寫法
-    const allRes = await Promise.race([
-      fetch(`${SB_URL}/rest/v1/cd?select=key,value&limit=1000`, { headers: SB_HDRS }),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
-    ]);
-    if (!allRes.ok) {
-      const errText = await allRes.text();
-      console.warn('warmCache HTTP error:', allRes.status, errText);
-      return;
+  // 用 gte + lte 範圍查詢抓所有含 userId 的 key（最可靠的 Supabase REST 寫法）
+  const gte = encodeURIComponent(`food_${userId}`);
+  const lte = encodeURIComponent(`food_${userId}~`); // ~ 在 ASCII 排在數字字母後面
+  const url1 = `${SB_URL}/rest/v1/cd?key=gte.food_${userId}&key=lte.food_${userId}~&select=key,value&limit=500`;
+  const url2 = `${SB_URL}/rest/v1/cd?key=gte.dynuser_${userId}&key=lte.dynuser_${userId}~&select=key,value&limit=10`;
+  const url3 = `${SB_URL}/rest/v1/cd?key=gte.intake_${userId}&key=lte.intake_${userId}~&select=key,value&limit=10`;
+  const url4 = `${SB_URL}/rest/v1/cd?key=gte.progress_${userId}&key=lte.progress_${userId}~&select=key,value&limit=10`;
+  const url5 = `${SB_URL}/rest/v1/cd?key=gte.inbox_${userId}&key=lte.inbox_${userId}~&select=key,value&limit=10`;
+  const url6 = `${SB_URL}/rest/v1/cd?key=gte.goals_${userId}&key=lte.goals_${userId}~&select=key,value&limit=10`;
+
+  const fetchUrl = async (url) => {
+    const res = await fetch(url, { headers: SB_HDRS });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`HTTP ${res.status}: ${t}`);
     }
-    const rows = await allRes.json();
-    // 只保留跟這個學員相關的 key
-    rows.forEach(({ key, value }) => {
-      if (
-        key.includes(userId) ||
-        key.startsWith('menus_') ||
-        key.startsWith('ency_') ||
-        key.startsWith('wplan_') ||
-        key.startsWith('daily_goals_') ||
-        key.startsWith('goals_')
-      ) {
-        _cache[key] = value;
-        try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
-      }
+    return res.json();
+  };
+
+  try {
+    const results = await Promise.all([
+      fetchUrl(url1), fetchUrl(url2), fetchUrl(url3),
+      fetchUrl(url4), fetchUrl(url5), fetchUrl(url6)
+    ]);
+    results.flat().forEach(({ key, value }) => {
+      _cache[key] = value;
+      try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
     });
-  } catch(e) { console.warn('warmCache failed:', e.message); throw e; }
+  } catch(e) {
+    console.warn('warmCache failed:', e.message);
+    throw e;
+  }
 }
 
 // ── bgSyncClient：背景更新，不阻塞 UI ──
@@ -760,7 +764,8 @@ async function syncClientData() {
     updateInboxBadge();
   } catch(e) {
     if (btn) { btn.style.opacity = ''; btn.textContent = '🔄 同步資料'; }
-    showToast('⚠️ 同步失敗，請檢查網路');
+    console.error('Sync error:', e);
+    showToast('⚠️ 同步失敗：' + (e.message || '請檢查網路'));
   }
 }
 
