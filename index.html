@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Co-Dare 口袋營養獅｜學員專區</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="window._fbFailed=true"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="window._fbFailed=true"></script>
+<script>
+let _db = null;
+const _cache = {};
+
+(function initFirebase() {
+  try {
+    if (typeof firebase === 'undefined') throw new Error('SDK not loaded');
+    firebase.initializeApp({
+      apiKey: "AIzaSyActPbd2RRGAE4Y5UgZbKKjIUQmGHOqKPY",
+      authDomain: "codare-8aba6.firebaseapp.com",
+      projectId: "codare-8aba6",
+      storageBucket: "codare-8aba6.firebasestorage.app",
+      messagingSenderId: "259025105764",
+      appId: "1:259025105764:web:59a58f97afc6461288c071",
+      databaseURL: "https://codare-8aba6-default-rtdb.asia-southeast1.firebasedatabase.app"
+    });
+    _db = firebase.database();
+    console.log('✅ Firebase 連線成功');
+  } catch(e) {
+    console.warn('⚠️ Firebase 未連線，使用 localStorage 模式：', e.message);
+    _db = null;
+  }
+})();
+
+function gs(key) {
+  if (_cache[key] !== undefined) return _cache[key];
+  try { return JSON.parse(localStorage.getItem('cd_' + key)); } catch { return null; }
+}
+function ss(key, val) {
+  _cache[key] = val;
+  try { localStorage.setItem('cd_' + key, JSON.stringify(val)); } catch {}
+  if (_db) {
+    _db.ref('cd/' + key.replace(/\//g,'_sl_')).set(val === null ? null : val)
+      .catch(e => console.warn('Firebase write error:', e));
+  }
+}
+async function warmCache(userId) {
+  if (!_db) return;
+  try {
+    const snap = await _db.ref('cd').orderByKey().once('value');
+    if (snap.exists()) {
+      snap.forEach(child => {
+        const k = child.key.replace(/_sl_/g, '/');
+        _cache[k] = child.val();
+        try { localStorage.setItem('cd_' + k, JSON.stringify(child.val())); } catch {}
+      });
+    }
+    console.log('✅ 資料同步完成');
+  } catch(e) {
+    console.warn('Cache warm failed, using localStorage:', e);
+  }
+}
+
+// ── Firebase realtime listener — no re-login needed ──
+function startRealtimeSync(userId) {
+  if (!_db || !userId) return;
+  const prefixes = [
+    `food_${userId}`,
+    `progress_${userId}`,
+    `goals_${userId}`,
+    `daily_goals_${userId}`,
+    `wplan_${userId}`,
+    `menus_${userId}`,
+    `ency_${userId}`,
+    `intake_${userId}`,
+    `dynuser_${userId}`,
+    `inbox_${userId}`
+  ];
+  _db.ref('cd').on('value', snap => {
+    if (!snap.exists()) return;
+    let updated = false;
+    snap.forEach(child => {
+      const k = child.key.replace(/_sl_/g, '/');
+      if (prefixes.some(p => k.startsWith(p))) {
+        const newVal = child.val();
+        if (JSON.stringify(newVal) !== JSON.stringify(_cache[k])) {
+          _cache[k] = newVal;
+          try { localStorage.setItem('cd_' + k, JSON.stringify(newVal)); } catch {}
+          updated = true;
+        }
+      }
+    });
+    if (updated && currentUser && document.getElementById('app')?.style.display !== 'none') {
+      updateInboxBadge();
+      const page = currentPage;
+      if (page === 'food' && currentFoodDay) {
+        document.getElementById('main-content').innerHTML = renderFoodEntry(currentFoodDay);
+      } else if (page === 'home') {
+        document.getElementById('main-content').innerHTML = renderHome();
+      } else if (page === 'inbox') {
+        document.getElementById('main-content').innerHTML = renderInbox();
+      }
+    }
+  });
+}
+</script>
+<style>
+:root {
+  --green: #4a9d6f;
+  --green-light: #e8f5ee;
+  --green-dark: #2d7a50;
+  --amber: #f59e0b;
+  --amber-light: #fef3c7;
+  --blue: #3b82f6;
+  --blue-light: #eff6ff;
+  --red: #ef4444;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Noto Sans TC', sans-serif; background: var(--gray-50); color: var(--gray-800); min-height: 100vh; font-size: 15px; line-height: 1.6; }
+
+/* LOGIN */
+#login-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #e8f5ee 0%, #f9fafb 60%); }
+.login-logo { font-size: 52px; margin-bottom: 8px; }
+.login-brand { font-size: 22px; font-weight: 700; color: var(--green-dark); margin-bottom: 4px; }
+.login-sub { font-size: 13px; color: var(--gray-500); margin-bottom: 36px; }
+.login-card { background: #fff; border-radius: 20px; padding: 28px 24px; width: 100%; max-width: 380px; box-shadow: var(--shadow-md); }
+.login-card h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--gray-600); margin-bottom: 6px; }
+.form-group input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--gray-200); border-radius: 10px; font-size: 15px; font-family: inherit; background: var(--gray-50); transition: border-color 0.2s; outline: none; }
+.form-group input:focus { border-color: var(--green); background: #fff; }
+.btn-primary { width: 100%; padding: 14px; background: var(--green); color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.2s; margin-top: 4px; }
+.btn-primary:active { background: var(--green-dark); }
+.login-error { color: var(--red); font-size: 13px; margin-top: 10px; text-align: center; display: none; }
+.login-hint { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--gray-100); font-size: 12px; color: var(--gray-400); text-align: center; }
+
+/* APP SHELL */
+#app { display: none; flex-direction: column; min-height: 100vh; }
+.topbar { background: #fff; border-bottom: 1px solid var(--gray-200); padding: 0 16px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.topbar-brand { font-size: 17px; font-weight: 700; color: var(--green-dark); }
+.topbar-user { display: flex; align-items: center; gap: 10px; }
+.topbar-name { font-size: 13px; color: var(--gray-700); font-weight: 500; }
+.btn-logout { background: none; border: 1px solid var(--gray-200); border-radius: 8px; padding: 5px 10px; font-size: 12px; color: var(--gray-500); cursor: pointer; font-family: inherit; }
+.content { flex: 1; padding: 16px; max-width: 480px; margin: 0 auto; width: 100%; padding-bottom: 84px; }
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--gray-200); display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 2px 6px; background: none; border: none; cursor: pointer; font-family: inherit; color: var(--gray-400); gap: 2px; }
+.nav-item.active { color: var(--green); }
+.nav-icon { font-size: 20px; line-height: 1; }
+.nav-label { font-size: 9px; font-weight: 500; white-space: nowrap; }
+.nav-icon { font-size: 22px; line-height: 1; }
+.nav-label { font-size: 10px; font-weight: 500; }
+
+/* CARDS */
+.card { background: #fff; border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+.card-title { font-size: 16px; font-weight: 700; color: var(--gray-800); margin-bottom: 12px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--gray-900); margin-bottom: 16px; }
+.notice { background: var(--amber-light); border-left: 3px solid var(--amber); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--gray-700); margin-bottom: 16px; }
+.notice-blue { background: var(--blue-light); border-left-color: var(--blue); }
+
+/* HOME */
+.home-header { background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%); border-radius: 16px; padding: 20px; color: #fff; margin-bottom: 16px; }
+.home-greeting { font-size: 14px; opacity: 0.85; margin-bottom: 4px; }
+.home-name { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+.home-period { background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.home-period strong { font-size: 15px; display: block; margin-top: 2px; }
+.quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.quick-btn { background: #fff; border: 1.5px solid var(--gray-200); border-radius: 12px; padding: 16px 12px; text-align: center; cursor: pointer; font-family: inherit; transition: border-color 0.15s; }
+.quick-btn:active { border-color: var(--green); }
+.quick-btn-icon { font-size: 28px; margin-bottom: 6px; }
+.quick-btn-label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+
+/* FOOD LIST */
+.day-item { display: flex; align-items: center; padding: 13px 16px; background: #fff; border-radius: 10px; margin-bottom: 8px; box-shadow: var(--shadow); cursor: pointer; gap: 12px; }
+.day-item:active { opacity: 0.85; }
+.day-item-date { font-weight: 700; font-size: 16px; flex: 1; }
+.day-item-arrow { color: var(--gray-400); font-size: 16px; }
+.week-header { font-size: 12px; font-weight: 700; color: var(--gray-500); padding: 8px 4px 4px; letter-spacing: 0.5px; }
+
+/* FOOD ENTRY */
+.back-btn { display: flex; align-items: center; gap: 4px; background: none; border: none; font-family: inherit; font-size: 15px; color: var(--green); cursor: pointer; padding: 0; margin-bottom: 16px; font-weight: 500; }
+.meal-section { margin-bottom: 18px; }
+.meal-title { font-size: 14px; font-weight: 700; color: var(--gray-700); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--gray-100); }
+.meal-textarea { width: 100%; padding: 12px; border: 1.5px solid var(--gray-200); border-radius: 10px; font-size: 14px; font-family: inherit; resize: none; outline: none; background: var(--gray-50); transition: border-color 0.2s; min-height: 76px; }
+.meal-textarea:focus { border-color: var(--green); background: #fff; }
+.meal-textarea::placeholder { color: var(--gray-400); }
+.life-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.life-field label { display: block; font-size: 12px; font-weight: 500; color: var(--gray-500); margin-bottom: 4px; }
+.life-field input, .life-field textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--gray-200); border-radius: 8px; font-size: 14px; font-family: inherit; background: var(--gray-50); outline: none; transition: border-color 0.2s; }
+.life-field input:focus, .life-field textarea:focus { border-color: var(--green); background: #fff; }
+.life-field.full { grid-column: 1 / -1; }
+.life-field textarea { resize: none; min-height: 72px; }
+.save-btn { width: 100%; padding: 14px; background: var(--green); color: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.15s; }
+.save-btn:active { background: var(--green-dark); }
+.notify-btn { width: 100%; padding: 14px; background: var(--green-light); color: var(--green-dark); border: 2px solid var(--green); border-radius: 12px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; transition: all 0.15s; margin-top: 10px; }
+.notify-btn:active, .notify-btn.sent { background: var(--green); color: #fff; }
+.rd-box { background: var(--green-light); border-left: 3px solid var(--green); border-radius: 8px; padding: 12px 14px; margin-top: 16px; }
+.rd-box-title { font-size: 12px; font-weight: 700; color: var(--green-dark); margin-bottom: 6px; }
+
+/* BODY DATA */
+.body-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.body-table th { background: var(--gray-100); padding: 10px 4px; text-align: center; font-size: 11px; font-weight: 700; color: var(--gray-600); border: 1px solid var(--gray-200); }
+.body-table td { padding: 8px 4px; border: 1px solid var(--gray-200); text-align: center; }
+.body-table td input { width: 100%; border: none; background: transparent; text-align: center; font-size: 14px; font-family: inherit; outline: none; padding: 0; }
+.body-table tr.current-week { background: #f0faf5; }
+.progress-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--gray-100); }
+.progress-item:last-child { border-bottom: none; }
+.progress-week { width: 36px; height: 36px; border-radius: 8px; background: var(--blue-light); color: var(--blue); font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.progress-week.done { background: var(--green-light); color: var(--green-dark); }
+
+/* GOALS */
+.goal-week-tab { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.goal-week-tab::-webkit-scrollbar { display: none; }
+.week-tab-btn { padding: 8px 18px; border-radius: 20px; border: 1.5px solid var(--gray-200); background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; transition: all 0.15s; }
+.week-tab-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+.goal-item { display: flex; align-items: flex-start; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--gray-100); }
+.goal-item:last-child { border-bottom: none; }
+.goal-check { width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--gray-300); flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; margin-top: 1px; min-width: 24px; }
+.goal-check.checked { background: var(--green); border-color: var(--green); }
+.goal-check.checked::after { content: '✓'; color: #fff; font-size: 13px; font-weight: 700; }
+.goal-text { font-size: 14px; line-height: 1.6; flex: 1; }
+.goal-text.done { text-decoration: line-through; color: var(--gray-400); }
+
+/* MATERIALS */
+.material-item { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--gray-100); cursor: pointer; }
+.material-item:last-child { border-bottom: none; }
+.material-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.material-icon.video { background: #fee2e2; }
+.material-icon.pdf { background: #e0f2fe; }
+.material-title { font-size: 14px; font-weight: 500; }
+.material-desc { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+.material-arrow { color: var(--gray-400); margin-left: auto; font-size: 18px; }
+
+/* IMAGE UPLOAD */
+.img-upload-area {
+  margin-top: 8px;
+}
+.img-upload-row {
+  display: flex;
+  gap: 8px;
+}
+.img-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 10px;
+  border: 1.5px dashed var(--gray-300);
+  border-radius: 10px;
+  background: var(--gray-50);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--gray-500);
+  font-family: inherit;
+  flex: 1;
+  transition: border-color 0.2s, background 0.2s;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.img-upload-btn:active { border-color: var(--green); background: var(--green-light); color: var(--green-dark); }
+.img-upload-input { display: none; }
+.img-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.img-thumb-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  flex-shrink: 0;
+}
+.img-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.img-thumb-del {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
+/* TOAST */
+.toast { position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%) translateY(60px); background: var(--gray-900); color: #fff; padding: 12px 20px; border-radius: 20px; font-size: 14px; font-weight: 500; z-index: 9999; transition: transform 0.3s ease; white-space: nowrap; opacity: 0; }
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* PROGRESS DETAIL */
+.prog-section { margin-bottom: 18px; }
+.prog-section-title { font-size: 12px; font-weight: 700; color: var(--green-dark); background: var(--green-light); padding: 6px 12px; border-radius: 6px; margin-bottom: 10px; }
+.prog-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 14px; }
+.prog-row:last-child { border-bottom: none; }
+.prog-row-label { color: var(--gray-500); width: 90px; flex-shrink: 0; font-size: 13px; }
+.prog-row-val { font-weight: 500; color: var(--gray-800); flex: 1; }
+.meal-dist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.meal-dist-item { background: var(--gray-50); border-radius: 8px; padding: 10px 12px; }
+.meal-dist-label { font-size: 11px; font-weight: 700; color: var(--gray-500); margin-bottom: 4px; }
+.meal-dist-val { font-size: 13px; color: var(--gray-700); }
+.cpvfdo-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.badge { padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; background: var(--gray-100); color: var(--gray-600); }
+.badge.C { background: #fef3c7; color: #92400e; }
+.badge.P { background: #ffe4e6; color: #9f1239; }
+.badge.V { background: #dcfce7; color: #166534; }
+.badge.F { background: #fce7f3; color: #9d174d; }
+.badge.D { background: #e0f2fe; color: #075985; }
+.badge.O { background: #f5f3ff; color: #5b21b6; }
+
+/* MATERIAL SUB-PAGES */
+.mat-tab-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.mat-tab-btn { flex: 1; padding: 12px 8px; border-radius: 12px; border: 1.5px solid var(--gray-200); background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; text-align: center; transition: all 0.15s; line-height: 1.4; }
+.mat-tab-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+.course-item { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--gray-100); cursor: pointer; }
+.course-item:last-child { border-bottom: none; }
+.course-num { width: 32px; height: 32px; border-radius: 8px; background: var(--green-light); color: var(--green-dark); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.course-title { font-size: 14px; font-weight: 500; flex: 1; }
+.course-arrow { color: var(--gray-400); font-size: 16px; }
+.ency-item { display: flex; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--gray-100); }
+.ency-item:last-child { border-bottom: none; }
+.ency-icon { font-size: 22px; }
+.ency-info .ency-title { font-size: 14px; font-weight: 500; }
+.ency-info .ency-desc { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--gray-400); }
+.empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; line-height: 1.6; }
+
+/* MENU PAGE */
+.period-tab-row { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.period-tab-row::-webkit-scrollbar { display: none; }
+.period-tab-btn { padding: 8px 18px; border-radius: 20px; border: 1.5px solid var(--gray-200); background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; transition: all 0.15s; }
+.period-tab-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+.menu-week-block { margin-bottom: 16px; }
+.menu-week-label { font-size: 13px; font-weight: 700; color: var(--gray-500); padding: 6px 4px 8px; border-bottom: 1px solid var(--gray-200); margin-bottom: 10px; }
+.menu-day-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--gray-100); }
+.menu-day-row:last-child { border-bottom: none; }
+.menu-day-name { font-size: 13px; font-weight: 700; color: var(--gray-500); width: 28px; flex-shrink: 0; padding-top: 1px; }
+.menu-day-content { flex: 1; font-size: 14px; color: var(--gray-700); line-height: 1.6; }
+.menu-day-content.empty { color: var(--gray-300); font-size: 13px; }
+.menu-meal-tag { display: inline-block; font-size: 11px; font-weight: 700; color: var(--green-dark); background: var(--green-light); padding: 1px 6px; border-radius: 4px; margin-right: 4px; margin-bottom: 2px; }
+.add-period-btn { width: 100%; padding: 13px; border: 1.5px dashed var(--gray-300); border-radius: 12px; background: none; font-family: inherit; font-size: 14px; color: var(--gray-400); cursor: pointer; margin-top: 4px; }
+
+/* UTILITY */
+.hidden { display: none !important; }
+.divider { height: 1px; background: var(--gray-100); margin: 16px 0; }
+.mb12 { margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-logo">🦁</div>
+  <div class="login-brand">Co-Dare 口袋營養獅</div>
+  <div class="login-sub">學員專屬平台</div>
+  <div class="login-card">
+    <h2>登入學員帳號</h2>
+    <div class="form-group">
+      <label>帳號（手機號碼）</label>
+      <input type="tel" id="login-id" placeholder="0912345678" inputmode="tel" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密碼</label>
+      <div style="position:relative">
+        <input type="password" id="login-pw" placeholder="請輸入密碼" autocomplete="current-password" style="padding-right:60px">
+        <button type="button" id="pw-toggle" onclick="togglePw()"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:13px;color:var(--green-dark);cursor:pointer;font-family:inherit;font-weight:600;padding:4px 0">顯示</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0 14px">
+      <input type="checkbox" id="keep-login" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+      <label for="keep-login" style="font-size:14px;color:var(--gray-600);cursor:pointer;user-select:none">維持登入</label>
+    </div>
+    <button class="btn-primary" onclick="doLogin()">登入</button>
+    <div class="login-error" id="login-error">帳號或密碼錯誤，請再試一次</div>
+    <div style="margin-top:14px;font-size:12px;color:var(--gray-400);text-align:center;line-height:1.7">
+      若忘記密碼，請與您的專屬營養師聯繫，<br>將重新提供給您 🦁
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-brand">🦁 Co-Dare</div>
+    <div class="topbar-user">
+      <span class="topbar-name" id="topbar-name"></span>
+      <button class="btn-logout" onclick="doLogout()">登出</button>
+    </div>
+  </div>
+  <div class="content" id="main-content"></div>
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nav-home" onclick="showPage('home')">
+      <div class="nav-icon">🏠</div><div class="nav-label">首頁</div>
+    </button>
+    <button class="nav-item" id="nav-food" onclick="showPage('food')">
+      <div class="nav-icon">🍱</div><div class="nav-label">飲食</div>
+    </button>
+    <button class="nav-item" id="nav-body" onclick="showPage('body')">
+      <div class="nav-icon">📊</div><div class="nav-label">數值</div>
+    </button>
+    <button class="nav-item" id="nav-goals" onclick="showPage('goals')">
+      <div class="nav-icon">🎯</div><div class="nav-label">目標</div>
+    </button>
+    <button class="nav-item" id="nav-materials" onclick="showPage('materials')">
+      <div class="nav-icon">📚</div><div class="nav-label">教材</div>
+    </button>
+    <button class="nav-item" id="nav-menu" onclick="showPage('menu')">
+      <div class="nav-icon">🥗</div><div class="nav-label">菜單</div>
+    </button>
+    <button class="nav-item" id="nav-inbox" onclick="showPage('inbox')" style="position:relative">
+      <div class="nav-icon">📬</div><div class="nav-label">收件</div>
+      <span id="inbox-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 14px);background:#ef4444;color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;min-width:16px;text-align:center">0</span>
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════ DATA ══════════
+const USERS = {
+  '0912345678': { password: 'codare123', name: '小明', period: '2026/05/25 – 06/22', currentWeek: 1, goal: '本期目標：體重從 68kg 降至 65kg，養成均衡飲食習慣' }
+};
+
+const DEFAULT_GOALS = {
+  1: [
+    { text: '每天喝 1500ml 的水', done: false },
+    { text: '每天吃 3 份蔬菜', done: false },
+    { text: '每天吃一份水果', done: false },
+    { text: '一週運動三天（至少 30 分鐘）', done: false }
+  ],
+  2: [], 3: [], 4: []
+};
+
+const DEFAULT_PROGRESS = [
+  { week: 'W1', weight: null, fat: null, waist: null, muscle: null },
+  { week: 'W2', weight: null, fat: null, waist: null, muscle: null },
+  { week: 'W3', weight: null, fat: null, waist: null, muscle: null },
+  { week: 'W4', weight: null, fat: null, waist: null, muscle: null }
+];
+
+// Weekly nutritionist plan (set by RD, read-only for student)
+// Weekly plans are set by RD, default empty
+const DEFAULT_WEEKLY_PLANS = {};
+
+const MATERIALS = [];
+
+// Menus are set by RD, default empty
+const DEFAULT_MENUS = {};
+
+// Build course dates dynamically from currentUser.start (set after login)
+// Format: M/D for each day in 29-day course
+// Build course dates from start to end (inclusive), every day
+function buildCourseDates(startStr, endStr) {
+  const parseDate = str => {
+    if (!str) return null;
+    const p = str.replace(/-/g,'/').split('/');
+    if (p.length === 3) return new Date(+p[0], +p[1]-1, +p[2]);
+    if (p.length === 2) return new Date(2026, +p[0]-1, +p[1]);
+    return null;
+  };
+  const base = parseDate(startStr) || new Date(2026, 4, 25);
+  const end  = parseDate(endStr);
+  if (isNaN(base.getTime())) return [];
+  const dates = [];
+  for (let i = 0; i < 366; i++) {
+    const d = new Date(base); d.setDate(base.getDate() + i);
+    if (end && d > end) break;
+    if (!end && i >= 29) break;
+    dates.push(`${d.getMonth()+1}/${d.getDate()}`);
+  }
+  return dates;
+}
+
+// COURSE_DATES rebuilt on login from currentUser.start + end
+let COURSE_DATES = buildCourseDates('2026/05/25', '2026/06/22');
+
+// Group dates into weeks (7 days each)
+function buildWeekGroups(dates) {
+  const groups = [];
+  for (let w = 0; w * 7 < dates.length; w++) {
+    const chunk = dates.slice(w*7, (w+1)*7);
+    if (!chunk.length) break;
+    groups.push({ label: `W${w+1} ${chunk[0]}–${chunk[chunk.length-1]}`, dates: chunk });
+  }
+  return groups;
+}
+
+// ══════════ STATE ══════════
+let currentUser = null;
+let currentPage = 'home';
+let currentFoodDay = null;
+let currentGoalWeek = 1;
+let currentProgressWeek = null;
+let currentMatTab = 'courses';
+let currentFoodCat = null; // null = category list, 'food_grain' etc = gallery view
+let currentMenuPeriod = 1;
+
+// ══════════ STORAGE ══════════
+// gs() and ss() are defined in <head> via Firebase SDK
+
+// ══════════ AUTH ══════════
+function togglePw() {
+  const input = document.getElementById('login-pw');
+  const btn = document.getElementById('pw-toggle');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '隱藏';
+  } else {
+    input.type = 'password';
+    btn.textContent = '顯示';
+  }
+}
+
+async function findUser(id, pw) {
+  // 1. Check hardcoded users
+  if (USERS[id] && USERS[id].password === pw) return { ...USERS[id], id };
+  // 2. Check Firebase for dynamically created accounts
+  try {
+    const snap = await _db.ref('cd/dynuser_' + id).once('value');
+    if (snap.exists()) {
+      const dyn = snap.val();
+      if (dyn && dyn.password === pw) return { ...dyn, id };
+    }
+  } catch(e) {}
+  // 3. Fallback to localStorage (offline)
+  try {
+    const dyn = JSON.parse(localStorage.getItem('cd_dynuser_' + id));
+    if (dyn && dyn.password === pw) return { ...dyn, id };
+  } catch(e) {}
+  return null;
+}
+
+async function doLogin() {
+  const id = document.getElementById('login-id').value.trim();
+  const pw = document.getElementById('login-pw').value;
+  const keep = document.getElementById('keep-login').checked;
+  const loginBtn = document.querySelector('.btn-primary');
+  if (loginBtn) { loginBtn.textContent = '登入中...'; loginBtn.disabled = true; }
+  const u = await findUser(id, pw);
+  if (loginBtn) { loginBtn.textContent = '登入'; loginBtn.disabled = false; }
+  if (u) {
+    currentUser = u;
+    document.getElementById('login-error').style.display = 'none';
+    if (keep) localStorage.setItem('cd_autologin', JSON.stringify({ id, pw }));
+    else localStorage.removeItem('cd_autologin');
+    // Warm cache from Firebase before launching
+    await warmCache(id);
+    launchApp();
+  } else {
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+function launchApp() {
+  const startDate = currentUser.start || '2026/05/25';
+  const endDate   = currentUser.end   || null;
+  COURSE_DATES.length = 0;
+  buildCourseDates(startDate, endDate).forEach(d => COURSE_DATES.push(d));
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('topbar-name').textContent = currentUser.name + ' 學員';
+
+  // Start Firebase realtime sync — no re-login needed when data updates
+  startRealtimeSync(currentUser.id);
+
+  showPage('home');
+  setTimeout(updateInboxBadge, 500);
+}
+
+function doLogout() {
+  localStorage.removeItem('cd_autologin');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-pw').type = 'password';
+  document.getElementById('pw-toggle').textContent = '顯示';
+  currentUser = null;
+  document.getElementById('login-id').value = '';
+  document.getElementById('login-pw').value = '';
+  document.getElementById('keep-login').checked = false;
+  // Clear cache on logout
+  Object.keys(_cache).forEach(k => delete _cache[k]);
+}
+
+// Auto-login check on page load
+(function checkAutoLogin() {
+  setTimeout(async () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('cd_autologin'));
+      if (saved && saved.id && saved.pw) {
+        const u = await findUser(saved.id, saved.pw);
+        if (u) {
+          currentUser = u;
+          await warmCache(saved.id);
+          launchApp();
+        }
+      }
+    } catch(e) {}
+  }, 500); // slight delay to let Firebase initialize
+})();
+
+// ══════════ NAV ══════════
+function showPage(page) {
+  currentPage = page;
+  currentFoodDay = null;
+  currentProgressWeek = null;
+  ['home','food','body','goals','menu','materials'].forEach(p => {
+    const el = document.getElementById('nav-' + p);
+    if (el) el.classList.toggle('active', p === page);
+  });
+  renderPage();
+}
+
+document.getElementById('login-pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// ══════════ TOAST ══════════
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ══════════ RENDER ══════════
+function renderPage() {
+  const el = document.getElementById('main-content');
+  if (currentFoodDay) { el.innerHTML = renderFoodEntry(currentFoodDay); return; }
+  if (currentProgressWeek !== null && currentPage === 'body') { el.innerHTML = renderProgressDetail(currentProgressWeek); return; }
+  const map = { home: renderHome, food: renderFoodList, body: renderBody, goals: renderGoals, menu: renderMenu, materials: renderMaterials, inbox: renderInbox };
+  el.innerHTML = (map[currentPage] || renderHome)();
+}
+
+// ── HOME ──
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}_${d.getMonth()+1}_${d.getDate()}`;
+}
+
+function getDailyGoals(userId, week) {
+  const today = getTodayKey();
+  return gs(`daily_goals_${userId}_${week}_${today}`) || [];
+}
+
+function updateInboxBadge() {
+  const msgs = gs(`inbox_${currentUser.id}`) || [];
+  const unread = msgs.filter(m => !m.read).length;
+  const badge = document.getElementById('inbox-badge');
+  if (badge) { badge.textContent = unread; badge.style.display = unread > 0 ? '' : 'none'; }
+}
+
+function renderHome() {
+  const today = new Date();
+  const todayStr = `${today.getMonth()+1}/${today.getDate()}`;
+  const done = COURSE_DATES.filter(d => {
+    const s = gs(`food_${currentUser.id}_${d}`);
+    return s && s.notified;
+  }).length;
+  const passed = COURSE_DATES.filter(d => {
+    const [m, day] = d.split('/').map(Number);
+    return new Date(today.getFullYear(), m-1, day) <= today;
+  }).length;
+  const pct = passed ? Math.round(done / passed * 100) : 0;
+
+  const prog = gs(`progress_${currentUser.id}`) || DEFAULT_PROGRESS;
+  const wGroups = buildWeekGroups(COURSE_DATES);
+  const curWeekIdx = wGroups.findIndex(wg => wg.dates.includes(todayStr));
+  const curWeek = curWeekIdx >= 0 ? curWeekIdx + 1 : 1;
+
+  // Daily goals (today's check-in)
+  const goals = gs(`goals_${currentUser.id}_${curWeek}`) || [];
+  const dailyDone = getDailyGoals(currentUser.id, curWeek);
+  const doneCount = goals.filter((_, i) => dailyDone[i]).length;
+
+  // Unread inbox
+  const msgs = gs(`inbox_${currentUser.id}`) || [];
+  const unread = msgs.filter(m => !m.read).length;
+
+  // Unread feedback
+  const newFbDays = COURSE_DATES.filter(d => {
+    const f = gs(`food_${currentUser.id}_${d}`);
+    return f && f.rdFeedbackDone && !f.fbRead;
+  });
+
+  const fbNoticeHTML = newFbDays.length > 0 ? `
+  <div class="card" style="background:linear-gradient(135deg,#e8f5ee,#f0fdf4);border:1.5px solid var(--green);margin-bottom:4px;cursor:pointer" onclick="goToFeedbackDay('${newFbDays[0]}')">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="font-size:30px">🥦</div>
+      <div style="flex:1">
+        <div style="font-weight:700;color:var(--green-dark);font-size:15px">營養師有新回饋！</div>
+        <div style="font-size:12px;color:var(--green);margin-top:2px">共 ${newFbDays.length} 天尚未查看，點此查看回饋</div>
+      </div>
+      <div style="background:var(--green);color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${newFbDays.length}</div>
+    </div>
+  </div>` : '';
+
+  const inboxNoticeHTML = unread > 0 ? `
+  <div class="card" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #3b82f6;margin-bottom:4px;cursor:pointer" onclick="showPage('inbox')">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="font-size:30px">📬</div>
+      <div style="flex:1">
+        <div style="font-weight:700;color:#1e40af;font-size:15px">有 ${unread} 則新通知！</div>
+        <div style="font-size:12px;color:#3b82f6;margin-top:2px">點此查看收件夾</div>
+      </div>
+      <div style="background:#3b82f6;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${unread}</div>
+    </div>
+  </div>` : '';
+
+  const w1 = prog[0]?.weight;
+
+  return `
+  <div class="home-header">
+    <div class="home-greeting">歡迎回來 👋</div>
+    <div class="home-name">${currentUser.name} 學員</div>
+    <div class="home-period">課程期間 <strong>📅 ${currentUser.period}</strong></div>
+  </div>
+
+  ${fbNoticeHTML}${inboxNoticeHTML}
+
+  <div class="quick-grid">
+    <button class="quick-btn" onclick="showPage('food')">
+      <div class="quick-btn-icon">🍱</div><div class="quick-btn-label">今日飲食紀錄</div>
+    </button>
+    <button class="quick-btn" onclick="showPage('body')">
+      <div class="quick-btn-icon">⚖️</div><div class="quick-btn-label">身體數值追蹤</div>
+    </button>
+    <button class="quick-btn" onclick="showPage('goals')">
+      <div class="quick-btn-icon">🎯</div><div class="quick-btn-label">本週小目標</div>
+    </button>
+    <button class="quick-btn" onclick="showPage('inbox')">
+      <div class="quick-btn-icon">📬</div><div class="quick-btn-label">收件夾${unread > 0 ? ` <span style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700">${unread}</span>` : ''}</div>
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎯 本期目標</div>
+    <div style="font-size:14px;color:var(--gray-600);line-height:1.6">${currentUser.goal}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✅ 飲食紀錄完成率</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:13px;color:var(--gray-500)">已完成 ${done} / 共 ${passed} 天</span>
+      <span style="font-size:18px;font-weight:700;color:var(--green)">${pct}%</span>
+    </div>
+    <div style="background:var(--gray-200);height:8px;border-radius:4px;overflow:hidden">
+      <div style="background:var(--green);height:100%;width:${pct}%;border-radius:4px;transition:width 0.5s"></div>
+    </div>
+  </div>
+
+  <div class="card" style="cursor:pointer" onclick="showPage('goals')">
+    <div class="card-title">第 ${curWeek} 週每日目標完成（今日）</div>
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <div style="font-size:30px;font-weight:700;color:var(--green)">${doneCount}</div>
+      <div style="font-size:16px;color:var(--gray-400)">/ ${goals.length || '?'} 項</div>
+      ${goals.length && doneCount === goals.length ? '<div style="font-size:18px">🎉</div>' : ''}
+    </div>
+    ${goals.length === 0 ? '<div style="font-size:12px;color:var(--gray-400);margin-top:4px">等待營養師設定本週目標</div>' : '<div style="font-size:12px;color:var(--gray-400);margin-top:4px">每天凌晨自動歸零，每日都要達成 💪</div>'}
+  </div>
+
+  ${w1 ? `<div class="card">
+    <div class="card-title">⚖️ 體重追蹤</div>
+    <div style="display:flex;gap:12px">
+      ${prog.slice(0, wGroups.length).map((p,i) => `<div style="flex:1;text-align:center">
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">W${i+1}</div>
+        <div style="font-size:15px;font-weight:${p.weight ? '700' : '400'};color:${p.weight ? 'var(--green-dark)' : 'var(--gray-300)'}">${p.weight ? p.weight + 'kg' : '--'}</div>
+      </div>`).join('')}
+    </div>
+  </div>` : ''}`;
+}
+
+// ── FOOD LIST ──
+function renderFoodList() {
+  const today = new Date();
+  const todayStr = `${today.getMonth()+1}/${today.getDate()}`;
+
+  // Dynamic week grouping — 7 days per week, last week may be shorter
+  const weekDates = [];
+  for (let w = 0; w * 7 < COURSE_DATES.length; w++) {
+    weekDates.push(COURSE_DATES.slice(w * 7, (w + 1) * 7));
+  }
+  const weekLabels = weekDates.map((chunk, w) =>
+    `第${['一','二','三','四','五','六','七','八'][w] || (w+1)}週（${chunk[0]}–${chunk[chunk.length-1]}）`
+  );
+
+  let html = `<div class="page-title">每日飲食紀錄</div>
+  <div class="notice">💬 每天用餐後記錄飲食內容，記得通知營養師！</div>`;
+
+  weekDates.forEach((wdates, wi) => {
+    if (!wdates.length) return;
+    html += `<div class="week-header">${weekLabels[wi]}</div>`;
+    wdates.forEach(d => {
+      const saved = gs(`food_${currentUser.id}_${d}`);
+      const isToday = d === todayStr;
+      const [m, day] = d.split('/').map(Number);
+      const startYear = currentUser.start ? parseInt((currentUser.start||'2026').split('/')[0]) || 2026 : 2026;
+      const isPast = new Date(startYear, m-1, day) < today;
+      let icon = '⚪️';
+      if (saved && saved.notified) icon = '✅';
+      else if (saved && (saved.breakfast || saved.lunch || saved.dinner)) icon = '📝';
+      else if (isToday) icon = '👉';
+      else if (!isPast) icon = '⚪️';
+      html += `<div class="day-item" onclick="openFoodDay('${d}')">
+        <span style="font-size:18px">${icon}</span>
+        <span class="day-item-date" style="${isToday ? 'color:var(--green-dark)' : ''}">${d}${isToday ? '（今天）' : ''}</span>
+        <span class="day-item-arrow">›</span>
+      </div>`;
+    });
+  });
+  return html;
+}
+
+// ── FOOD ENTRY ──
+function openFoodDay(day) {
+  currentFoodDay = day;
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+  window.scrollTo(0, 0);
+}
+
+function renderFoodEntry(day) {
+  const saved = gs(`food_${currentUser.id}_${day}`) || {};
+  const meals = [
+    { label: '早餐', key: 'breakfast', ph: '例：蛋餅 + 豆漿、吐司夾蛋...' },
+    { label: '點心（上午）', key: 'snack1', ph: '例：堅果一小把、水果一份...' },
+    { label: '午餐', key: 'lunch', ph: '例：雞腿便當、燙青菜 + 肉片...' },
+    { label: '點心（下午）', key: 'snack2', ph: '例：優格、果汁（100%）...' },
+    { label: '晚餐', key: 'dinner', ph: '例：清炒蔬菜、蒸魚、五穀飯...' },
+    { label: '宵夜', key: 'latenight', ph: '如有宵夜習慣請記錄（盡量避免）' }
+  ];
+
+  const mealHTML = meals.map(m => {
+    const imgs = (saved[m.key + '_imgs'] || []);
+    const thumbs = imgs.map((src, i) => `
+      <div class="img-thumb-wrap">
+        <img class="img-thumb" src="${src}" alt="餐點照片">
+        <button class="img-thumb-del" onclick="delMealImg('${day}','${m.key}',${i})" type="button">✕</button>
+      </div>`).join('');
+    // Support array of feedback (new) or single string (old)
+    const mealFbArr = Array.isArray(saved[m.key + '_rdFeedbacks'])
+      ? saved[m.key + '_rdFeedbacks']
+      : (saved[m.key + '_rdFeedback'] ? [{ text: saved[m.key + '_rdFeedback'] }] : []);
+    const mealFbHTML = mealFbArr.length ? mealFbArr.map(fb => `
+      <div style="margin-top:6px;background:var(--green-light);border-left:3px solid var(--green);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--green-dark);line-height:1.6">
+        <span style="font-weight:700">🥦 營養師：</span>${fb.text}
+      </div>`).join('') : '';
+    return `
+    <div class="meal-section">
+      <div class="meal-title">${m.label}</div>
+      <div class="img-upload-area">
+        <div class="img-upload-row" id="upload-btns-${m.key}">
+          <button class="img-upload-btn" onclick="triggerImgCamera('${m.key}')" type="button">📷 拍照</button>
+          <button class="img-upload-btn" onclick="triggerImgGallery('${m.key}')" type="button">🖼️ 從相簿選取</button>
+        </div>
+        <input class="img-upload-input" type="file" accept="image/*" capture="environment"
+          id="img-cam-${m.key}" onchange="handleImgUpload(event,'${day}','${m.key}')">
+        <input class="img-upload-input" type="file" accept="image/*" multiple
+          id="img-gal-${m.key}" onchange="handleImgUpload(event,'${day}','${m.key}')">
+        <div class="img-preview-row" id="preview-${m.key}">${thumbs}</div>
+        ${imgs.length > 0 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:4px">${imgs.length} 張｜點照片右上角 ✕ 可刪除</div>` : ''}
+      </div>
+      <textarea class="meal-textarea" id="m-${m.key}" placeholder="${m.ph}" style="margin-top:8px">${saved[m.key] || ''}</textarea>
+      ${mealFbHTML}
+    </div>`;
+  }).join('');
+
+  const notified = saved.notified;
+  // Support array (new) or single string (old)
+  const overallArr = Array.isArray(saved.rdFeedbacks)
+    ? saved.rdFeedbacks
+    : (saved.rdFeedback ? [{ text: saved.rdFeedback }] : []);
+  const hasOverall = overallArr.length > 0;
+
+  const overallHTML = hasOverall
+    ? overallArr.map(fb => `
+        <div style="background:var(--green-light);border-left:3px solid var(--green);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:13px;color:var(--green-dark);line-height:1.7">
+          <span style="font-weight:700">🥦 營養師：</span>${fb.text}
+        </div>`).join('')
+    : `<div style="font-size:14px;color:var(--gray-400);line-height:1.6">尚未回饋，等待營養師確認中...</div>`;
+
+  return `
+  <button class="back-btn" onclick="backToList()">‹ 返回飲食紀錄</button>
+  <div class="page-title">${day} 飲食日記</div>
+
+  ${mealHTML}
+
+  <div class="divider"></div>
+  <div style="font-size:15px;font-weight:700;margin-bottom:14px">📝 生活細節記錄</div>
+
+  <div class="life-grid">
+    <div class="life-field">
+      <label>運動形式</label>
+      <input type="text" id="l-extype" value="${saved.exType || ''}" placeholder="例：慢跑、重訓">
+    </div>
+    <div class="life-field">
+      <label>運動時間（分鐘）</label>
+      <input type="number" id="l-exmin" value="${saved.exMin || ''}" placeholder="30" inputmode="numeric">
+    </div>
+    <div class="life-field">
+      <label>飲水量（ml）</label>
+      <input type="number" id="l-water" value="${saved.water || ''}" placeholder="1500" inputmode="numeric">
+    </div>
+    <div class="life-field">
+      <label>睡眠時間（小時）</label>
+      <input type="number" id="l-sleep" value="${saved.sleep || ''}" placeholder="7" inputmode="decimal" step="0.5">
+    </div>
+    <div class="life-field">
+      <label>排便次數</label>
+      <input type="number" id="l-poop" value="${saved.poop || ''}" placeholder="1" inputmode="numeric">
+    </div>
+    <div class="life-field full">
+      <label>飲食札記（今天的感受、心情、或困惑都可以寫）</label>
+      <textarea id="l-note" placeholder="今天吃了什麼讓你開心或困擾？都歡迎告訴我們！">${saved.lifeNote || ''}</textarea>
+    </div>
+  </div>
+
+  <button class="save-btn" onclick="saveFoodDay('${day}')">💾 儲存紀錄</button>
+  <button class="notify-btn ${notified ? 'sent' : ''}" id="notify-btn" onclick="notifyRD('${day}')">
+    ${notified ? '✅ 已通知營養師' : '🍎 完成紀錄後按我通知營養師～'}
+  </button>
+
+  <div class="${hasOverall ? 'rd-box' : 'rd-box'}" style="${!hasOverall ? 'background:var(--gray-50);border-left-color:var(--gray-300)' : ''}">
+    <div class="rd-box-title" style="${!hasOverall ? 'color:var(--gray-500)' : ''}">🥦 整日回饋</div>
+    ${overallHTML}
+    ${notified && !hasOverall ? '<div style="font-size:12px;color:var(--gray-400);margin-top:6px">⏳ 已通知，營養師將在平日 22:00 前回覆</div>' : ''}
+    ${hasOverall ? '<div style="font-size:12px;color:var(--green);margin-top:6px;font-weight:500">✅ 營養師已回饋</div>' : ''}
+  </div>`;
+}
+
+function backToList() {
+  currentFoodDay = null;
+  document.getElementById('main-content').innerHTML = renderFoodList();
+  window.scrollTo(0, 0);
+}
+
+function getFoodData(day) {
+  return {
+    breakfast: document.getElementById('m-breakfast')?.value || '',
+    snack1: document.getElementById('m-snack1')?.value || '',
+    lunch: document.getElementById('m-lunch')?.value || '',
+    snack2: document.getElementById('m-snack2')?.value || '',
+    dinner: document.getElementById('m-dinner')?.value || '',
+    latenight: document.getElementById('m-latenight')?.value || '',
+    exType: document.getElementById('l-extype')?.value || '',
+    exMin: document.getElementById('l-exmin')?.value || '',
+    water: document.getElementById('l-water')?.value || '',
+    sleep: document.getElementById('l-sleep')?.value || '',
+    poop: document.getElementById('l-poop')?.value || '',
+    lifeNote: document.getElementById('l-note')?.value || ''
+  };
+}
+
+function saveFoodDay(day) {
+  const existing = gs(`food_${currentUser.id}_${day}`) || {};
+  ss(`food_${currentUser.id}_${day}`, { ...existing, ...getFoodData(day) });
+  showToast('✅ 紀錄已儲存！');
+}
+
+function notifyRD(day) {
+  saveFoodDay(day);
+  const existing = gs(`food_${currentUser.id}_${day}`) || {};
+  existing.notified = true;
+  existing.notifiedAt = new Date().toISOString();
+  ss(`food_${currentUser.id}_${day}`, existing);
+  const btn = document.getElementById('notify-btn');
+  if (btn) { btn.classList.add('sent'); btn.innerHTML = '✅ 已通知營養師'; }
+  showToast('🎉 已通知營養師，等待回饋！');
+}
+
+// ── BODY DATA ──
+function renderBody() {
+  const prog = gs(`progress_${currentUser.id}`) || JSON.parse(JSON.stringify(DEFAULT_PROGRESS));
+  const w1 = prog[0].weight;
+  const latest = [...prog].reverse().find(p => p.weight);
+  const change = (w1 && latest && latest !== prog[0]) ? (latest.weight - w1).toFixed(1) : null;
+
+  const rows = prog.map((p, i) => `
+    <tr ${i === 0 ? 'class="current-week"' : ''}>
+      <td style="font-weight:700;color:var(--gray-700)">${p.week}</td>
+      <td><input type="number" inputmode="decimal" step="0.1" value="${p.weight || ''}" placeholder="--" data-pi="${i}" data-pf="weight" oninput="updateProg(this)"></td>
+      <td><input type="number" inputmode="decimal" step="0.1" value="${p.fat || ''}" placeholder="--" data-pi="${i}" data-pf="fat" oninput="updateProg(this)"></td>
+      <td><input type="number" inputmode="decimal" step="0.1" value="${p.waist || ''}" placeholder="--" data-pi="${i}" data-pf="waist" oninput="updateProg(this)"></td>
+      <td><input type="number" inputmode="decimal" step="0.1" value="${p.muscle || ''}" placeholder="--" data-pi="${i}" data-pf="muscle" oninput="updateProg(this)"></td>
+    </tr>`).join('');
+
+  return `
+  <div class="page-title">身體數值追蹤</div>
+  <div class="notice">💬 每週三填寫本週數值，填完請通知營養師！</div>
+
+  ${w1 && change ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div class="card" style="text-align:center;margin-bottom:0">
+      <div style="font-size:22px;font-weight:700;color:var(--green-dark)">${w1}kg</div>
+      <div style="font-size:12px;color:var(--gray-500);margin-top:2px">起始體重</div>
+    </div>
+    <div class="card" style="text-align:center;margin-bottom:0">
+      <div style="font-size:22px;font-weight:700;color:${change < 0 ? 'var(--green)' : 'var(--red)'}">${change > 0 ? '+' : ''}${change}kg</div>
+      <div style="font-size:12px;color:var(--gray-500);margin-top:2px">目前變化</div>
+    </div>
+  </div>` : ''}
+
+  <div class="card" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <table class="body-table">
+      <thead><tr>
+        <th>週次</th><th>體重(kg)</th><th>體脂(%)</th><th>腰圍(cm)</th><th>肌肉(kg)</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="margin-top:10px;font-size:12px;color:var(--gray-400)">點擊各欄位直接輸入數字</div>
+  </div>
+
+  <button class="save-btn" onclick="saveProgress()">💾 儲存數值</button>
+  <button class="notify-btn" onclick="notifyBody()" style="margin-top:10px">🍎 完成後通知營養師</button>
+
+  <div class="card" style="margin-top:4px">
+    <div class="card-title">📊 營養師每週進度確認</div>
+    ${prog.map((p, i) => {
+      const plan = gs(`wplan_${currentUser.id}_${i+1}`) || DEFAULT_WEEKLY_PLANS[i+1] || {};
+      const hasData = p.weight || plan.calories;
+      return `
+    <div class="progress-item" onclick="openProgressDetail(${i+1})" style="cursor:pointer">
+      <div class="progress-week ${p.weight ? 'done' : ''}">${i+1}</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:700">${p.week} 體重：${p.weight ? p.weight + 'kg' : '尚未紀錄'}</div>
+        <div style="font-size:12px;color:var(--gray-500);">${plan.calories ? '熱量設定：'+plan.calories : '點擊查看本週計畫'}</div>
+      </div>
+      <div style="color:var(--gray-400);font-size:18px">›</div>
+    </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function updateProg(el) {
+  const i = parseInt(el.dataset.pi);
+  const f = el.dataset.pf;
+  const prog = gs(`progress_${currentUser.id}`) || JSON.parse(JSON.stringify(DEFAULT_PROGRESS));
+  prog[i][f] = el.value ? parseFloat(el.value) : null;
+  ss(`progress_${currentUser.id}`, prog);
+}
+
+function saveProgress() { showToast('✅ 數值已儲存！'); }
+function notifyBody() {
+  const prog = gs(`progress_${currentUser.id}`) || [];
+  const notifKey = `body_notif_${currentUser.id}`;
+  ss(notifKey, {
+    notified: true,
+    notifiedAt: new Date().toISOString(),
+    name: currentUser.name,
+    rdId: currentUser.rd || null
+  });
+  showToast('🎉 已通知營養師！等待確認中...');
+}
+
+// ── GOALS (每日打勾，每天凌晨歸零) ──
+function renderGoals() {
+  const wGroups = buildWeekGroups(COURSE_DATES);
+  const totalWeeks = wGroups.length || 1;
+  if (currentGoalWeek > totalWeeks) currentGoalWeek = 1;
+
+  const tabs = Array.from({length: totalWeeks}, (_, i) => i+1).map(w => `
+    <button class="week-tab-btn ${w === currentGoalWeek ? 'active' : ''}" onclick="switchGoalWeek(${w})">第 ${w} 週</button>`).join('');
+
+  const goals = gs(`goals_${currentUser.id}_${currentGoalWeek}`) || [];
+  const today = getTodayKey();
+  const dailyDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${today}`) || [];
+
+  // Build today's checklist
+  const goalItems = goals.length ? goals.map((g, i) => `
+    <div class="goal-item" style="align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
+      <div class="goal-check ${dailyDone[i] ? 'checked' : ''}" onclick="toggleDailyGoal(${i})" style="flex-shrink:0;margin-top:2px"></div>
+      <div style="flex:1">
+        <div class="goal-text ${dailyDone[i] ? 'done' : ''}" style="font-size:14px">${g.text}</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">每天做到就打勾～每天凌晨自動歸零</div>
+      </div>
+    </div>`).join('') : `<div style="text-align:center;padding:24px 0;color:var(--gray-400);font-size:14px">
+      本週目標尚未設定<br>請等待營養師更新
+    </div>`;
+
+  const doneToday = goals.filter((_, i) => dailyDone[i]).length;
+
+  // 7-day achievement per week
+  const curWeekGroup = wGroups[currentGoalWeek - 1];
+  const weekDates = curWeekGroup ? curWeekGroup.dates : [];
+  const dayRows = weekDates.map(dateStr => {
+    const [m, d] = dateStr.split('/');
+    const dt = new Date(new Date().getFullYear(), m-1, d);
+    const dayKey = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}`;
+    const dayDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${dayKey}`) || [];
+    const dayCount = goals.filter((_, i) => dayDone[i]).length;
+    const allDone = goals.length > 0 && dayCount === goals.length;
+    const isToday = dayKey === today;
+    const isFuture = dt > new Date();
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+      <div style="font-size:18px">${allDone ? '✅' : isFuture ? '⬜' : goals.length === 0 ? '—' : '○'}</div>
+      <div style="flex:1;font-size:13px;font-weight:${isToday ? '700' : '400'};color:${isToday ? 'var(--green-dark)' : 'var(--gray-600)'}">
+        週${['日','一','二','三','四','五','六'][dt.getDay()]} ${dateStr}${isToday ? '（今天）' : ''}
+      </div>
+      <div style="font-size:12px;color:${allDone ? 'var(--green)' : 'var(--gray-400)'}">
+        ${isFuture ? '—' : goals.length ? `${dayCount}/${goals.length}` : '—'}
+      </div>
+    </div>`;
+  });
+
+  const achievedDays = weekDates.filter(dateStr => {
+    const [m, d] = dateStr.split('/');
+    const dt = new Date(new Date().getFullYear(), m-1, d);
+    if (dt > new Date()) return false;
+    const dayKey = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}`;
+    const dayDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${dayKey}`) || [];
+    return goals.length > 0 && goals.every((_, i) => dayDone[i]);
+  }).length;
+  const totalPassedDays = weekDates.filter(dateStr => {
+    const [m, d] = dateStr.split('/');
+    return new Date(new Date().getFullYear(), m-1, d) <= new Date();
+  }).length;
+  const weekPct = totalPassedDays ? Math.round(achievedDays / 7 * 100) : 0;
+
+  return `
+  <div class="page-title">每週小目標</div>
+  <div class="goal-week-tab">${tabs}</div>
+
+  <div class="card">
+    <div class="card-title">🎯 第 ${currentGoalWeek} 週目標（今日 ${doneToday}/${goals.length || '?'} 項完成）</div>
+    ${goalItems}
+    ${goals.length ? `<div style="margin-top:8px;font-size:12px;color:var(--gray-400)">💡 每天做到就打勾，每天凌晨 00:00 自動歸零，每日重新挑戰！</div>` : ''}
+  </div>
+
+  <div class="card">
+    <div class="card-title">📈 本週 7 天達成率
+      <span style="font-size:13px;font-weight:400;color:var(--gray-500);margin-left:8px">${achievedDays}/7 天（${weekPct}%）</span>
+    </div>
+    <div style="background:var(--gray-200);height:8px;border-radius:4px;overflow:hidden;margin-bottom:14px">
+      <div style="background:var(--green);height:100%;width:${weekPct}%;border-radius:4px;transition:width 0.4s"></div>
+    </div>
+    ${dayRows.join('')}
+    <div style="margin-top:8px;font-size:11px;color:var(--gray-400)">✅ = 當天所有目標全部完成｜○ = 部分完成或尚未完成</div>
+  </div>
+
+  ${totalWeeks > 1 ? `<div class="card">
+    <div class="card-title">📊 各週概覽</div>
+    ${Array.from({length: totalWeeks}, (_, i) => i+1).map(w => {
+      const wg2 = wGroups[w-1];
+      const wGoals = gs(`goals_${currentUser.id}_${w}`) || [];
+      const wAchieved = (wg2?.dates || []).filter(dateStr => {
+        const [m2, d2] = dateStr.split('/');
+        const dt2 = new Date(new Date().getFullYear(), m2-1, d2);
+        if (dt2 > new Date()) return false;
+        const dk = `${dt2.getFullYear()}_${dt2.getMonth()+1}_${dt2.getDate()}`;
+        const dd = gs(`daily_goals_${currentUser.id}_${w}_${dk}`) || [];
+        return wGoals.length > 0 && wGoals.every((_, i2) => dd[i2]);
+      }).length;
+      const wPct = Math.round(wAchieved / 7 * 100);
+      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:36px;font-size:13px;font-weight:600;color:var(--gray-600)">W${w}</div>
+        <div style="flex:1;background:var(--gray-200);height:6px;border-radius:3px;overflow:hidden">
+          <div style="background:var(--green);height:100%;width:${wPct}%;border-radius:3px;transition:width 0.4s"></div>
+        </div>
+        <div style="font-size:12px;color:${wPct===100?'var(--green)':'var(--gray-500)'};width:55px;text-align:right">${wGoals.length ? wAchieved+'/7 天' : '待設定'}</div>
+      </div>`;
+    }).join('')}
+  </div>` : ''}`;
+}
+
+function toggleDailyGoal(i) {
+  const goals = gs(`goals_${currentUser.id}_${currentGoalWeek}`) || [];
+  if (!goals[i]) return;
+  const today = getTodayKey();
+  const key = `daily_goals_${currentUser.id}_${currentGoalWeek}_${today}`;
+  const dailyDone = gs(key) || [];
+  dailyDone[i] = !dailyDone[i];
+  ss(key, dailyDone);
+  document.getElementById('main-content').innerHTML = renderGoals();
+  updateInboxBadge();
+}
+
+function toggleGoal(i) { toggleDailyGoal(i); } // backward compat
+
+function switchGoalWeek(w) {
+  currentGoalWeek = w;
+  document.getElementById('main-content').innerHTML = renderGoals();
+}
+
+// ── INBOX ──
+function renderInbox() {
+  const msgs = gs(`inbox_${currentUser.id}`) || [];
+  // Mark all as read when opening inbox
+  if (msgs.some(m => !m.read)) {
+    msgs.forEach(m => m.read = true);
+    ss(`inbox_${currentUser.id}`, msgs);
+    updateInboxBadge();
+  }
+  const sorted = [...msgs].reverse();
+  const iconMap = { feedback: '🥦', weekplan: '📋', bodytrack: '⚖️', menu: '🥗', materials: '📚', general: '📬' };
+  const actionMap = {
+    feedback: (m) => `goToFeedbackDay('${m.day || ''}')`,
+    weekplan: () => `showPage('body')`,
+    bodytrack: () => `showPage('body')`,
+    menu: () => `showPage('menu')`,
+    materials: () => `showPage('materials')`,
+    general: () => ``
+  };
+  return `
+  <div class="page-title">📬 收件夾</div>
+  ${sorted.length === 0 ? `<div class="card"><div style="text-align:center;padding:24px 0;color:var(--gray-400);font-size:14px">尚無通知<br>當營養師有新回饋或更新時，這裡會收到通知！</div></div>` : ''}
+  ${sorted.map((m, i) => `
+    <div class="card" style="cursor:${m.type && m.type !== 'general' ? 'pointer' : 'default'};border-left:3px solid ${m.read ? 'var(--gray-200)' : '#3b82f6'};padding-left:14px"
+      onclick="${actionMap[m.type || 'general']?.(m) || ''}">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div style="font-size:24px;flex-shrink:0">${iconMap[m.type || 'general'] || '📬'}</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14px;color:var(--gray-800)">${m.title || '通知'}</div>
+          <div style="font-size:13px;color:var(--gray-600);margin-top:3px;line-height:1.5">${m.body || ''}</div>
+          <div style="font-size:11px;color:var(--gray-400);margin-top:6px">${m.at ? new Date(m.at).toLocaleString('zh-TW') : ''}</div>
+        </div>
+        ${m.type && m.type !== 'general' ? '<div style="color:var(--gray-400);font-size:16px;align-self:center">›</div>' : ''}
+      </div>
+    </div>`).join('')}`;
+}
+
+function goToFeedbackDay(day) {
+  if (!day) { showPage('food'); return; }
+  // Mark fbRead for this day
+  const f = gs(`food_${currentUser.id}_${day}`);
+  if (f) { f.fbRead = true; ss(`food_${currentUser.id}_${day}`, f); }
+  currentFoodDay = day;
+  // Find which week contains this day
+  const wGroups = buildWeekGroups(COURSE_DATES);
+  const wi = wGroups.findIndex(wg => wg.dates.includes(day));
+  if (wi >= 0) currentFoodWeek = wi + 1;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-food')?.classList.add('active');
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+  window.scrollTo(0, 0);
+}
+
+// ── MENU PAGE ──
+function renderMenu() {
+  const allMenus = gs(`menus_${currentUser.id}`) || DEFAULT_MENUS;
+  const periods = Object.keys(allMenus).map(Number).sort((a,b) => a-b);
+  if (!periods.includes(currentMenuPeriod)) currentMenuPeriod = periods[0];
+  const menu = allMenus[currentMenuPeriod];
+
+  const periodTabs = periods.map(p => `
+    <button class="period-tab-btn ${p === currentMenuPeriod ? 'active' : ''}" onclick="switchMenuPeriod(${p})">第 ${p} 期</button>
+  `).join('');
+
+  let daysHTML = '';
+  if (!menu || !menu.days || menu.days.length === 0) {
+    daysHTML = `<div class="empty-state"><div class="empty-icon">🥗</div><p>本期菜單尚未提供<br>請等待營養師上傳！</p></div>`;
+  } else {
+    daysHTML = menu.days.map(d => `
+      <div class="menu-day-row">
+        <div class="menu-day-name">週${d.name}</div>
+        <div class="menu-day-content">
+          ${d.breakfast ? `<div><span class="menu-meal-tag">早</span>${d.breakfast}</div>` : ''}
+          ${d.lunch     ? `<div style="margin-top:5px"><span class="menu-meal-tag">午</span>${d.lunch}</div>` : ''}
+          ${d.dinner    ? `<div style="margin-top:5px"><span class="menu-meal-tag">晚</span>${d.dinner}</div>` : ''}
+          ${d.snack     ? `<div style="margin-top:5px"><span class="menu-meal-tag" style="background:var(--amber-light);color:#92400e">點</span>${d.snack}</div>` : ''}
+          ${d.cpvfdo   ? `<div style="margin-top:6px;font-size:11px;color:var(--gray-500);background:var(--gray-50);padding:4px 8px;border-radius:6px">📊 ${d.cpvfdo}</div>` : ''}
+        </div>
+      </div>`).join('');
+  }
+
+  return `
+  <div class="page-title">客製化菜單</div>
+  <div class="notice">🥗 根據你的飲食喜好與目標量身規劃，每期更新一次</div>
+  <div class="period-tab-row">${periodTabs}</div>
+  <div style="font-size:13px;color:var(--gray-500);margin-bottom:8px">${menu ? menu.label : ''}</div>
+  ${menu && menu.note ? `<div style="font-size:12px;color:var(--amber);background:var(--amber-light);border-radius:8px;padding:8px 12px;margin-bottom:12px">💡 ${menu.note}</div>` : ''}
+  <div class="card">${daysHTML}</div>
+  <button class="add-period-btn" onclick="showToast('續約後由營養師在後台新增期別')">＋ 新增期別（續約後由營養師開通）</button>`;
+}
+
+function switchMenuPeriod(p) {
+  currentMenuPeriod = p;
+  document.getElementById('main-content').innerHTML = renderMenu();
+  window.scrollTo(0, 0);
+}
+
+// ── MATERIALS ──
+const COURSES = [
+  { num: 1,  title: '認識熱量與熱量赤字' },
+  { num: 2,  title: '健檢報告解密' },
+  { num: 3,  title: '豆魚蛋肉類' },
+  { num: 4,  title: '全穀雜糧類' },
+  { num: 5,  title: '蔬菜水果類' },
+  { num: 6,  title: '油脂類' },
+  { num: 7,  title: '運動營養' },
+  { num: 8,  title: '外食技巧交戰守則' },
+  { num: 9,  title: '看懂營養標示／嘴饞點心不用怕' },
+  { num: 10, title: '保健品全攻略' }
+];
+
+const FOOD_CATS = [
+  { key: 'food_grain',   label: '全穀雜糧類', icon: '🍚', color: '#fef3c7', border: '#f59e0b' },
+  { key: 'food_dairy',   label: '乳品類',     icon: '🥛', color: '#e0f2fe', border: '#0ea5e9' },
+  { key: 'food_protein', label: '豆魚蛋肉類', icon: '🥩', color: '#ffe4e6', border: '#f43f5e' },
+  { key: 'food_veg',     label: '蔬菜類',     icon: '🥦', color: '#dcfce7', border: '#22c55e' },
+  { key: 'food_fruit',   label: '水果類',     icon: '🍎', color: '#fce7f3', border: '#ec4899' },
+  { key: 'food_fat',     label: '油脂類',     icon: '🥑', color: '#f5f3ff', border: '#8b5cf6' }
+];
+
+function renderMaterials() {
+  const now = Date.now();
+  const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
+  const rawItems = gs(`ency_${currentUser.id}`) || [];
+
+  const activeItems = rawItems.map(item => ({
+    ...item,
+    isExpired: item.uploadedAt && (now - item.uploadedAt) > ONE_YEAR,
+    daysLeft: item.uploadedAt ? Math.max(0, Math.ceil((item.uploadedAt + ONE_YEAR - now) / 86400000)) : null
+  })).filter(item => !item.isExpired);
+
+  const courseItems = activeItems.filter(item => item.category === 'course');
+  const encyItemsAll = activeItems.filter(item => item.category !== 'course');
+
+  // ── Course tab HTML ──
+  const courseHTML = COURSES.map(c => {
+    const uploaded = courseItems.find(item => (item.catKey || item.desc) === `course_${c.num}`);
+    const hasLink = uploaded && uploaded.fileType === 'link' && uploaded.linkUrl;
+    const hasFile = uploaded && uploaded.fileData;
+    const isClickable = hasLink || hasFile;
+    const clickHandler = hasLink
+      ? `onclick="window.open('${uploaded.linkUrl}','_blank')"`
+      : hasFile ? `onclick="openEncyPreview_course(${c.num - 1})"` : `onclick="showToast('課程影片即將上線，敬請期待！')"`;
+    return `<div class="course-item" ${clickHandler}>
+      <div class="course-num">${c.num}</div>
+      <div class="course-title">線上課程 ${c.num}｜${c.title}</div>
+      <div class="course-arrow" style="color:${isClickable ? 'var(--green)' : 'var(--gray-300)'}">${isClickable ? '▶' : '›'}</div>
+    </div>`;
+  }).join('');
+
+  // ── Ency tab HTML ──
+  let encyHTML = '';
+
+  if (currentFoodCat === null) {
+    // Category card list view
+    const catCards = FOOD_CATS.map(cat => {
+      const items = encyItemsAll.filter(item => (item.catKey || item.desc) === cat.key);
+      const count = items.length;
+      if (count === 0) return `
+        <div style="background:#f8fafc;border:1.5px solid var(--gray-200);border-radius:14px;padding:18px 16px;display:flex;align-items:center;gap:14px;opacity:0.5">
+          <div style="font-size:32px">${cat.icon}</div>
+          <div><div style="font-weight:700;font-size:14px;color:var(--gray-600)">${cat.label}</div>
+          <div style="font-size:12px;color:var(--gray-400);margin-top:2px">尚無教材</div></div>
+        </div>`;
+      return `
+        <div onclick="openFoodCat('${cat.key}')" style="background:${cat.color};border:1.5px solid ${cat.border};border-radius:14px;padding:18px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:opacity 0.15s" onmousedown="this.style.opacity=0.7" onmouseup="this.style.opacity=1">
+          <div style="font-size:32px">${cat.icon}</div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:15px;color:var(--gray-800)">${cat.label}</div>
+            <div style="font-size:12px;color:var(--gray-500);margin-top:2px">${count} 份教材</div>
+          </div>
+          <div style="font-size:20px;color:${cat.border}">›</div>
+        </div>`;
+    }).join('');
+    encyHTML = `<div style="display:flex;flex-direction:column;gap:10px">${catCards}</div>`;
+
+  } else {
+    // Gallery view for a specific category
+    const cat = FOOD_CATS.find(c => c.key === currentFoodCat);
+    const items = encyItemsAll.filter(item => item.desc === currentFoodCat);
+
+    const galleryHTML = items.map((item, i) => {
+      const globalIdx = activeItems.indexOf(item);
+      if (item.fileData && (item.fileType === 'image')) {
+        // Image thumbnail
+        return `<div onclick="openEncyPreview(${globalIdx})" style="cursor:pointer;border-radius:10px;overflow:hidden;background:#f1f5f9;aspect-ratio:1;position:relative">
+          <img src="${item.fileData}" style="width:100%;height:100%;object-fit:cover">
+          <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.45);padding:4px 6px;font-size:10px;color:#fff;line-height:1.3">${item.fileName || ''}</div>
+        </div>`;
+      } else if (item.fileData && item.fileType === 'pdf') {
+        return `<div onclick="openEncyPreview(${globalIdx})" style="cursor:pointer;border-radius:10px;background:#fee2e2;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+          <div style="font-size:32px">📄</div>
+          <div style="font-size:10px;color:var(--gray-600);text-align:center;padding:0 6px;word-break:break-all">${item.fileName || 'PDF'}</div>
+        </div>`;
+      } else if (item.fileType === 'link' && item.linkUrl) {
+        return `<div onclick="window.open('${item.linkUrl}','_blank')" style="cursor:pointer;border-radius:10px;background:${cat ? cat.color : '#f0fdf4'};border:1.5px solid ${cat ? cat.border : '#22c55e'};aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px">
+          <div style="font-size:28px">🔗</div>
+          <div style="font-size:10px;color:var(--gray-600);text-align:center;line-height:1.4">${item.title}</div>
+        </div>`;
+      }
+      return '';
+    }).filter(Boolean).join('');
+
+    encyHTML = `
+      <button class="back-btn" onclick="closeFoodCat()" style="margin-bottom:12px">‹ 返回</button>
+      <div style="font-size:18px;font-weight:700;margin-bottom:14px">${cat ? cat.icon + ' ' + cat.label : ''}</div>
+      ${items.length === 0
+        ? `<div style="text-align:center;padding:40px 0;color:var(--gray-400)"><div style="font-size:36px;margin-bottom:8px">📭</div><p>尚無教材</p></div>`
+        : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${galleryHTML}</div>`
+      }`;
+  }
+
+  return `
+  <div class="page-title">線上教材專區</div>
+  <div class="mat-tab-row">
+    <button class="mat-tab-btn ${currentMatTab==='courses'?'active':''}" onclick="switchMatTab('courses')">🎥 線上課程影片</button>
+    <button class="mat-tab-btn ${currentMatTab==='ency'?'active':''}" onclick="switchMatTab('ency')">📋 六大類食物<br>份數估算寶典</button>
+  </div>
+  ${currentMatTab === 'courses' ? `
+  <div class="notice notice-blue">📘 綠色 ▶ 表示已可觀看</div>
+  <div class="card">${courseHTML}</div>
+  ` : `
+  ${currentFoodCat ? '' : '<div class="notice notice-blue">📋 點選分類查看教材</div>'}
+  <div class="card">${encyHTML}</div>
+  `}`;
+}
+
+function openEncyPreview_course(courseIdx) {
+  // Find matching uploaded course item
+  const course = COURSES[courseIdx];
+  if (!course) return;
+  const rawItems = gs(`ency_${currentUser.id}`) || [];
+  const item = rawItems.find(i => i.category === 'course' && i.desc === `course_${course.num}`);
+  if (!item || !item.fileData) { showToast('此課程尚無附件'); return; }
+  if (item.fileType === 'pdf') {
+    const w = window.open();
+    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${item.fileData}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
+  } else {
+    const w = window.open();
+    if (w) w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${item.fileData}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
+  }
+}
+
+function switchMatTab(tab) {
+  currentMatTab = tab;
+  currentFoodCat = null;
+  document.getElementById('main-content').innerHTML = renderMaterials();
+}
+
+function openFoodCat(catKey) {
+  currentFoodCat = catKey;
+  document.getElementById('main-content').innerHTML = renderMaterials();
+  window.scrollTo(0, 0);
+}
+
+function closeFoodCat() {
+  currentFoodCat = null;
+  document.getElementById('main-content').innerHTML = renderMaterials();
+  window.scrollTo(0, 0);
+}
+
+// ── PROGRESS DETAIL ──
+function openProgressDetail(week) {
+  currentProgressWeek = week;
+  document.getElementById('main-content').innerHTML = renderProgressDetail(week);
+  window.scrollTo(0, 0);
+}
+
+function renderProgressDetail(week) {
+  const prog = gs(`progress_${currentUser.id}`) || JSON.parse(JSON.stringify(DEFAULT_PROGRESS));
+  const p = prog[week - 1] || {};
+  const plan = gs(`wplan_${currentUser.id}_${week}`) || {};
+  const goals = gs(`goals_${currentUser.id}_${week}`) || [];
+
+  function parseMealLine(str) {
+    if (!str) return null;
+    const badges = ['C','P','V','F','D','O'];
+    const parts = str.split('｜').map(s => s.trim()).filter(Boolean);
+    return `<div class="cpvfdo-badges">${parts.map(part => {
+      const letter = part.charAt(0);
+      if (badges.includes(letter)) return `<span class="badge ${letter}">${part}</span>`;
+      return `<span class="badge">${part}</span>`;
+    }).join('')}</div>`;
+  }
+
+  // Calculate daily total CPVFDO from all meals
+  function calcDailyTotal() {
+    const keys = ['C','P','V','F','D','O'];
+    const totals = {C:0,P:0,V:0,F:0,D:0,O:0};
+    const mealStrings = [plan.breakfast, plan.lunch, plan.dinner, plan.snack].filter(Boolean);
+    mealStrings.forEach(str => {
+      str.split('｜').forEach(part => {
+        const t = part.trim();
+        const letter = t.charAt(0);
+        if (keys.includes(letter)) {
+          const num = parseFloat(t.replace(letter,'').trim());
+          if (!isNaN(num)) totals[letter] += num;
+        }
+      });
+    });
+    const hasAny = Object.values(totals).some(v => v > 0);
+    if (!hasAny) return null;
+    return keys.map(k => totals[k] > 0 ? `${k} ${totals[k] % 1 === 0 ? totals[k] : totals[k].toFixed(1)}` : null).filter(Boolean).join('｜');
+  }
+
+  const hasMeals = plan.breakfast || plan.lunch || plan.dinner || plan.snack;
+  const dailyTotal = calcDailyTotal();
+
+  return `
+  <button class="back-btn" onclick="backToBody()">‹ 返回身體數值</button>
+  <div class="page-title">W${week} 本週計畫</div>
+
+  <div class="card">
+    <div class="prog-section">
+      <div class="prog-section-title">📅 基本資訊</div>
+      <div class="prog-row"><span class="prog-row-label">日期</span><span class="prog-row-val">${plan.date || '---'}</span></div>
+      <div class="prog-row"><span class="prog-row-label">熱量設定</span><span class="prog-row-val">${plan.calories || '---'}</span></div>
+      <div class="prog-row"><span class="prog-row-label">體重</span><span class="prog-row-val">${p.weight ? p.weight + ' kg' : '尚未記錄'}</span></div>
+      <div class="prog-row"><span class="prog-row-label">體脂</span><span class="prog-row-val">${p.fat ? p.fat + ' %' : '尚未記錄'}</span></div>
+      <div class="prog-row"><span class="prog-row-label">腰圍</span><span class="prog-row-val">${p.waist ? p.waist + ' cm' : '尚未記錄'}</span></div>
+    </div>
+
+    <div class="divider" style="margin:4px 0 14px"></div>
+
+    <div class="prog-section">
+      <div class="prog-section-title">🍽️ 餐次分配（C 全穀｜P 豆魚蛋肉｜V 蔬菜｜F 水果｜D 乳品｜O 油脂）</div>
+      ${hasMeals ? `
+      <div class="meal-dist-grid">
+        <div class="meal-dist-item">
+          <div class="meal-dist-label">早餐</div>
+          ${plan.breakfast ? parseMealLine(plan.breakfast) : '<div class="meal-dist-val">---</div>'}
+        </div>
+        <div class="meal-dist-item">
+          <div class="meal-dist-label">午餐</div>
+          ${plan.lunch ? parseMealLine(plan.lunch) : '<div class="meal-dist-val">---</div>'}
+        </div>
+        <div class="meal-dist-item">
+          <div class="meal-dist-label">晚餐</div>
+          ${plan.dinner ? parseMealLine(plan.dinner) : '<div class="meal-dist-val">---</div>'}
+        </div>
+        <div class="meal-dist-item">
+          <div class="meal-dist-label">點心</div>
+          ${plan.snack ? parseMealLine(plan.snack) : '<div class="meal-dist-val">---</div>'}
+        </div>
+      </div>
+      ${dailyTotal ? `
+      <div style="margin-top:12px;padding:10px 12px;background:var(--green-light);border-radius:8px;border-left:3px solid var(--green)">
+        <div style="font-size:11px;font-weight:700;color:var(--green-dark);margin-bottom:5px">📊 整天份數合計</div>
+        ${parseMealLine(dailyTotal)}
+      </div>` : ''}` : '<div style="color:var(--gray-400);font-size:13px;padding:8px 0">營養師尚未設定本週餐次分配</div>'}
+    </div>
+
+    <div class="divider" style="margin:4px 0 14px"></div>
+
+    <div class="prog-section">
+      <div class="prog-section-title">🏃 運動建議</div>
+      <div style="font-size:14px;color:var(--gray-700);line-height:1.7">${plan.exercise || '---'}</div>
+    </div>
+
+    <div class="divider" style="margin:4px 0 14px"></div>
+
+    <div class="prog-section">
+      <div class="prog-section-title">📝 備註（飲水、睡眠、其他注意事項）</div>
+      <div style="font-size:14px;color:var(--gray-700);line-height:1.7">${plan.note || '---'}</div>
+    </div>
+
+    ${goals.length > 0 ? `
+    <div class="divider" style="margin:4px 0 14px"></div>
+    <div class="prog-section" style="margin-bottom:0">
+      <div class="prog-section-title">🎯 本週小目標</div>
+      ${goals.map((g, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+          <div onclick="toggleGoalInDetail(${i},${week})" style="width:22px;height:22px;border-radius:50%;border:2px solid ${g.done ? 'var(--green)' : 'var(--gray-300)'};background:${g.done ? 'var(--green)' : '#fff'};display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all 0.2s">
+            ${g.done ? '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}
+          </div>
+          <div style="font-size:13px;color:${g.done ? 'var(--gray-400)' : 'var(--gray-700)'};text-decoration:${g.done ? 'line-through' : 'none'};line-height:1.5">${g.text}</div>
+        </div>`).join('')}
+      <div style="margin-top:8px;font-size:12px;color:var(--gray-400)">已完成 ${goals.filter(g=>g.done).length} / ${goals.length} 項</div>
+    </div>` : ''}
+  </div>`;
+}
+
+function toggleGoalInDetail(i, week) {
+  const goals = gs(`goals_${currentUser.id}_${week}`) || [];
+  if (!goals[i]) return;
+  goals[i].done = !goals[i].done;
+  ss(`goals_${currentUser.id}_${week}`, goals);
+  document.getElementById('main-content').innerHTML = renderProgressDetail(week);
+}
+
+function backToBody() {
+  currentProgressWeek = null;
+  document.getElementById('main-content').innerHTML = renderBody();
+  window.scrollTo(0, 0);
+}
+
+// ── MENU ──
+// Demo menu data for Period 1. Format: { week: 'W1', days: [{day:'一',meals:{b,l,d,s}},...] }
+// ── IMAGE UPLOAD ──
+function triggerImgCamera(mealKey) {
+  document.getElementById('img-cam-' + mealKey)?.click();
+}
+function triggerImgGallery(mealKey) {
+  document.getElementById('img-gal-' + mealKey)?.click();
+}
+
+function handleImgUpload(event, day, mealKey) {
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
+  let loaded = 0;
+  const results = [];
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      results.push(e.target.result);
+      loaded++;
+      if (loaded === files.length) appendImgs(day, mealKey, results);
+    };
+    reader.readAsDataURL(file);
+  });
+  event.target.value = '';
+}
+
+function appendImgs(day, mealKey, newImgs) {
+  if (!newImgs.length) return;
+  const existing = gs(`food_${currentUser.id}_${day}`) || {};
+  const key = mealKey + '_imgs';
+  const current = existing[key] || [];
+  const combined = [...current, ...newImgs]; // no cap
+  existing[key] = combined;
+  ss(`food_${currentUser.id}_${day}`, existing);
+  refreshImgPreview(mealKey, day, combined);
+  showToast(`✅ 已上傳 ${newImgs.length} 張照片`);
+}
+
+function delMealImg(day, mealKey, idx) {
+  const existing = gs(`food_${currentUser.id}_${day}`) || {};
+  const key = mealKey + '_imgs';
+  const imgs = existing[key] || [];
+  imgs.splice(idx, 1);
+  existing[key] = imgs;
+  ss(`food_${currentUser.id}_${day}`, existing);
+  refreshImgPreview(mealKey, day, imgs);
+  showToast('🗑️ 已刪除，可重新上傳');
+}
+
+function refreshImgPreview(mealKey, day, imgs) {
+  const previewRow = document.getElementById('preview-' + mealKey);
+  const uploadBtns = document.getElementById('upload-btns-' + mealKey);
+
+  if (previewRow) {
+    previewRow.innerHTML = imgs.map((src, i) => `
+      <div class="img-thumb-wrap">
+        <img class="img-thumb" src="${src}" alt="餐點照片">
+        <button class="img-thumb-del" onclick="delMealImg('${day}','${mealKey}',${i})" type="button">✕</button>
+      </div>`).join('');
+
+    // Update counter
+    let counter = previewRow.nextElementSibling;
+    if (counter && counter.tagName === 'DIV') {
+      if (imgs.length > 0) {
+        counter.textContent = `${imgs.length} 張｜點照片右上角 ✕ 可刪除`;
+        counter.style.display = '';
+      } else {
+        counter.style.display = 'none';
+      }
+    }
+  }
+  // Upload buttons always visible — no limit
+}
+
+// ── ENCY PREVIEW — fullscreen in-app lightbox with left/right navigation ──
+let _lbItems = [];   // image items currently in lightbox context
+let _lbIdx = 0;      // current index within _lbItems
+
+function openEncyPreview(idx) {
+  const now = Date.now();
+  const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
+  const items = (gs(`ency_${currentUser.id}`) || []).filter(i => !i.uploadedAt || (now - i.uploadedAt) <= ONE_YEAR);
+  const item = items[idx];
+  if (!item || !item.fileData) { showToast('此教材無附加檔案'); return; }
+
+  if (item.fileType === 'pdf') {
+    const w = window.open();
+    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${item.fileData}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
+    return;
+  }
+
+  // Build sibling image list (same category, images only)
+  const catKey = item.catKey || item.desc;
+  _lbItems = items.map((it, i) => ({ ...it, _origIdx: i }))
+    .filter(it => (it.catKey || it.desc) === catKey && it.fileType === 'image' && it.fileData);
+  _lbIdx = _lbItems.findIndex(it => it._origIdx === idx);
+  if (_lbIdx < 0) _lbIdx = 0;
+
+  renderLightbox();
+}
+
+function renderLightbox() {
+  document.getElementById('img-lightbox')?.remove();
+
+  const item = _lbItems[_lbIdx];
+  if (!item) return;
+
+  const hasPrev = _lbIdx > 0;
+  const hasNext = _lbIdx < _lbItems.length - 1;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'img-lightbox';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:pan-y;';
+
+  overlay.innerHTML = `
+    <button onclick="document.getElementById('img-lightbox').remove()"
+      style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:32px;cursor:pointer;padding:8px;line-height:1;z-index:2">✕</button>
+
+    ${hasPrev ? `<button onclick="lbNav(-1)"
+      style="position:absolute;left:12px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:32px;width:48px;height:48px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;backdrop-filter:blur(4px)">‹</button>` : ''}
+
+    ${hasNext ? `<button onclick="lbNav(1)"
+      style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:32px;width:48px;height:48px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;backdrop-filter:blur(4px)">›</button>` : ''}
+
+    <img src="${item.fileData}" style="max-width:88vw;max-height:82vh;object-fit:contain;border-radius:4px;user-select:none" draggable="false">
+
+    <div style="color:rgba(255,255,255,0.65);font-size:12px;margin-top:10px;display:flex;align-items:center;gap:12px">
+      <span>${item.fileName || ''}</span>
+      <span style="background:rgba(255,255,255,0.15);padding:2px 8px;border-radius:10px">${_lbIdx+1} / ${_lbItems.length}</span>
+    </div>`;
+
+  // Tap outside to close
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  // Swipe support
+  let touchStartX = 0;
+  overlay.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  overlay.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) lbNav(dx < 0 ? 1 : -1);
+  });
+
+  // Keyboard support
+  overlay._keyHandler = e => {
+    if (e.key === 'ArrowLeft') lbNav(-1);
+    else if (e.key === 'ArrowRight') lbNav(1);
+    else if (e.key === 'Escape') overlay.remove();
+  };
+  document.addEventListener('keydown', overlay._keyHandler);
+  overlay.addEventListener('remove', () => document.removeEventListener('keydown', overlay._keyHandler));
+
+  document.body.appendChild(overlay);
+}
+
+function lbNav(dir) {
+  const next = _lbIdx + dir;
+  if (next < 0 || next >= _lbItems.length) return;
+  _lbIdx = next;
+  renderLightbox();
+}
+
+function openEncyPreview_course(courseIdx) {
+  const course = COURSES[courseIdx];
+  if (!course) return;
+  const rawItems = gs(`ency_${currentUser.id}`) || [];
+  const item = rawItems.find(i => i.category === 'course' && i.desc === `course_${course.num}`);
+  if (!item) { showToast('課程影片即將上線，敬請期待！'); return; }
+  if (item.linkUrl) { window.open(item.linkUrl, '_blank'); return; }
+  if (item.fileData) {
+    const w = window.open();
+    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${item.fileData}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
+  }
+}
+</script>
+</body>
+</html>
