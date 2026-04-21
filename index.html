@@ -76,26 +76,23 @@ async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
   try {
-    // 只抓這個學員相關的 key，不抓所有人
-    const prefixFilters = [
-      `food_${userId}`, `progress_${userId}`, `goals_${userId}`,
-      `daily_goals_${userId}`, `wplan_${userId}`, `menus_${userId}`,
-      `intake_${userId}`, `dynuser_${userId}`, `inbox_${userId}`,
-      `body_notif_${userId}`, `ency_${userId}`
-    ];
-    const filter = prefixFilters.map(p => `key.like.${p}%`).join(',');
+    // 用 ilike 抓所有包含 userId 的 key（最穩定的方式）
+    const encoded = encodeURIComponent(`%${userId}%`);
     const res = await Promise.race([
-      fetch(`${SB_URL}/rest/v1/cd?or=(${filter})&select=key,value`, { headers: SB_HDRS }),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 6000))
+      fetch(`${SB_URL}/rest/v1/cd?key=ilike.${encoded}&select=key,value&limit=500`, { headers: SB_HDRS }),
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
     ]);
-    if (res.ok) {
-      const rows = await res.json();
-      rows.forEach(({ key, value }) => {
-        _cache[key] = value;
-        try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
-      });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('warmCache HTTP error:', res.status, errText);
+      return;
     }
-  } catch(e) { console.warn('warmCache failed, using localStorage:', e.message); }
+    const rows = await res.json();
+    rows.forEach(({ key, value }) => {
+      _cache[key] = value;
+      try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
+    });
+  } catch(e) { console.warn('warmCache failed, using localStorage:', e.message); throw e; }
 }
 
 // ── bgSyncClient：背景更新，不阻塞 UI ──
