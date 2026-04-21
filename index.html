@@ -739,27 +739,17 @@ async function syncClientData() {
   const btn = document.querySelector('[onclick="syncClientData()"]');
   if (btn) { btn.style.opacity = '0.5'; btn.textContent = '🔄 同步中…'; }
   try {
-    // Direct Supabase fetch — only current user's data
     const userId = currentUser.id;
-    const prefixes = [
-      `food_${userId}`, `progress_${userId}`, `goals_${userId}`,
-      `daily_goals_${userId}`, `wplan_${userId}`, `menus_${userId}`,
-      `intake_${userId}`, `dynuser_${userId}`, `inbox_${userId}`,
-      `body_notif_${userId}`, `ency_${userId}`
-    ];
-    const filter = prefixes.map(p => `key.like.${p}%`).join(',');
-    const res = await fetch(`${SB_URL}/rest/v1/cd?or=(${filter})&select=key,value`, { headers: SB_HDRS });
-    if (res.ok) {
-      const rows = await res.json();
-      rows.forEach(({ key, value }) => {
-        _cache[key] = value;
-        try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
-      });
-    }
+    // 用 warmCache 完整同步此學員所有資料（包含營養師回覆）
+    await warmCache(userId);
     if (btn) { btn.style.opacity = ''; btn.textContent = '🔄 同步資料'; }
     showToast('✅ 資料已同步！');
-    // Stay on current page — just re-render it
-    renderPage();
+    // 重新渲染當前頁面，讓營養師回覆立即顯示
+    if (currentFoodDay) {
+      document.getElementById('main-content').innerHTML = renderFoodEntry(currentFoodDay);
+    } else {
+      renderPage();
+    }
     updateInboxBadge();
   } catch(e) {
     if (btn) { btn.style.opacity = ''; btn.textContent = '🔄 同步資料'; }
