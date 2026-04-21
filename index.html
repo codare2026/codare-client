@@ -71,52 +71,35 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：從 Supabase 同步學員資料（包含營養師回覆）──
+// ── warmCache：從 Supabase 同步學員資料（包含營養師回覆、菜單、教材）──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
-  // 用 gte + lte 範圍查詢抓所有含 userId 的 key（最可靠的 Supabase REST 寫法）
-  const gte = encodeURIComponent(`food_${userId}`);
-  const lte = encodeURIComponent(`food_${userId}~`); // ~ 在 ASCII 排在數字字母後面
-  // 所有學員相關的 key 前綴，一次全部同步
-  const prefixes = [
-    `food_${userId}`,         // 飲食紀錄 + 營養師回覆
-    `dynuser_${userId}`,      // 學員基本資料
-    `intake_${userId}`,       // 建檔資料
-    `progress_${userId}`,     // 體態數值
-    `inbox_${userId}`,        // 收件匣
-    `goals_${userId}`,        // 目標
-    `daily_goals_${userId}`,  // 每日打勾目標
-    `wplan_${userId}`,        // 週計畫（營養師設定）
-    `menus_${userId}`,        // 菜單（營養師設定）
-    `ency_${userId}`,         // 教材（營養師上傳）
-    `body_notif_${userId}`,   // 體態通知
-    `btNote_${userId}`,       // 體態備註
+
+  // 一次抓全部資料，前端過濾（最穩定，不依賴複雜 filter 語法）
+  const res = await Promise.race([
+    fetch(`${SB_URL}/rest/v1/cd?select=key,value&limit=2000`, { headers: SB_HDRS }),
+    new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 6000))
+  ]);
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`HTTP ${res.status}: ${t}`);
+  }
+  const rows = await res.json();
+
+  // 只保留跟這個學員相關的 key
+  const relevant = [
+    `food_${userId}`, `dynuser_${userId}`, `intake_${userId}`,
+    `progress_${userId}`, `inbox_${userId}`, `goals_${userId}`,
+    `daily_goals_${userId}`, `wplan_${userId}`, `menus_${userId}`,
+    `ency_${userId}`, `body_notif_${userId}`, `btNote_${userId}`
   ];
-
-  const fetchUrl = async (url) => {
-    const res = await fetch(url, { headers: SB_HDRS });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`HTTP ${res.status}: ${t}`);
-    }
-    return res.json();
-  };
-
-  try {
-    // 每個 prefix 發一個 gte/lte 範圍查詢，全部並行
-    const requests = prefixes.map(p =>
-      fetchUrl(`${SB_URL}/rest/v1/cd?key=gte.${encodeURIComponent(p)}&key=lte.${encodeURIComponent(p + '~')}&select=key,value&limit=500`)
-    );
-    const results = await Promise.all(requests);
-    results.flat().forEach(({ key, value }) => {
+  rows.forEach(({ key, value }) => {
+    if (relevant.some(p => key.startsWith(p))) {
       _cache[key] = value;
       try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
-    });
-  } catch(e) {
-    console.warn('warmCache failed:', e.message);
-    throw e;
-  }
+    }
+  });
 }
 
 // ── bgSyncClient：背景更新，不阻塞 UI ──
