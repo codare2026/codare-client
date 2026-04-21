@@ -71,48 +71,54 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：從 Supabase 分批同步學員資料 ──
+// ── warmCache：精確 key 查詢，最快最穩定 ──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
 
-  // 用 Supabase 的 or filter，單一請求抓所有相關 key
-  // 格式：key=like.prefix%  用逗號分隔多個條件放進 or()
-  const prefixes = [
-    `food_${userId}`,
+  // 策略：用 eq 精確查固定 key（dynuser/intake/progress/menus/ency/inbox 等），
+  // 加上 like 查有日期後綴的 key（food_/goals_/daily_goals_/wplan_）
+  // 全部並行，每個請求都很小很快
+
+  const safeGet = async (url) => {
+    try {
+      const res = await Promise.race([
+        fetch(url, { headers: SB_HDRS }),
+        new Promise((_, r) => setTimeout(() => r(new Error('t')), 5000))
+      ]);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch(e) { return []; }
+  };
+
+  // 精確 key（固定，用 in 一次抓）
+  const exactKeys = [
     `dynuser_${userId}`,
     `intake_${userId}`,
     `progress_${userId}`,
-    `inbox_${userId}`,
-    `goals_${userId}`,
-    `daily_goals_${userId}`,
-    `wplan_${userId}`,
     `menus_${userId}`,
     `ency_${userId}`,
+    `inbox_${userId}`,
     `body_notif_${userId}`,
-    `btNote_${userId}`
+    `btNote_${userId}`,
   ];
+  const inFilter = exactKeys.map(k => `"${k}"`).join(',');
 
-  // 分兩批，每批 6 個 prefix，避免 URL 太長或 timeout
-  const batch = async (ps) => {
-    // Supabase or() filter: key.like.prefix% — % 不能 encode，否則變成 %25 會查不到
-    const orFilter = ps.map(p => `key.like.${p}%`).join(',');
-    const url = `${SB_URL}/rest/v1/cd?or=(${orFilter})&select=key,value&limit=500`;
-    const res = await Promise.race([
-      fetch(url, { headers: SB_HDRS }),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 7000))
-    ]);
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    return res.json();
-  };
+  // 有後綴的 key 用 like（food_/wplan_/goals_/daily_goals_）
+  const likeKeys = [
+    `food_${userId}`,
+    `wplan_${userId}`,
+    `goals_${userId}`,
+    `daily_goals_${userId}`,
+  ];
+  const likeFilter = likeKeys.map(p => `key.like.${p}%`).join(',');
 
-  const half = Math.ceil(prefixes.length / 2);
-  const [r1, r2] = await Promise.all([
-    batch(prefixes.slice(0, half)),
-    batch(prefixes.slice(half))
+  const [exactRows, likeRows] = await Promise.all([
+    safeGet(`${SB_URL}/rest/v1/cd?key=in.(${inFilter})&select=key,value`),
+    safeGet(`${SB_URL}/rest/v1/cd?or=(${likeFilter})&select=key,value&limit=500`),
   ]);
 
-  [...r1, ...r2].forEach(({ key, value }) => {
+  [...exactRows, ...likeRows].forEach(({ key, value }) => {
     _cache[key] = value;
     try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
   });
