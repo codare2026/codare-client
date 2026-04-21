@@ -78,12 +78,21 @@ async function warmCache(userId) {
   // 用 gte + lte 範圍查詢抓所有含 userId 的 key（最可靠的 Supabase REST 寫法）
   const gte = encodeURIComponent(`food_${userId}`);
   const lte = encodeURIComponent(`food_${userId}~`); // ~ 在 ASCII 排在數字字母後面
-  const url1 = `${SB_URL}/rest/v1/cd?key=gte.food_${userId}&key=lte.food_${userId}~&select=key,value&limit=500`;
-  const url2 = `${SB_URL}/rest/v1/cd?key=gte.dynuser_${userId}&key=lte.dynuser_${userId}~&select=key,value&limit=10`;
-  const url3 = `${SB_URL}/rest/v1/cd?key=gte.intake_${userId}&key=lte.intake_${userId}~&select=key,value&limit=10`;
-  const url4 = `${SB_URL}/rest/v1/cd?key=gte.progress_${userId}&key=lte.progress_${userId}~&select=key,value&limit=10`;
-  const url5 = `${SB_URL}/rest/v1/cd?key=gte.inbox_${userId}&key=lte.inbox_${userId}~&select=key,value&limit=10`;
-  const url6 = `${SB_URL}/rest/v1/cd?key=gte.goals_${userId}&key=lte.goals_${userId}~&select=key,value&limit=10`;
+  // 所有學員相關的 key 前綴，一次全部同步
+  const prefixes = [
+    `food_${userId}`,         // 飲食紀錄 + 營養師回覆
+    `dynuser_${userId}`,      // 學員基本資料
+    `intake_${userId}`,       // 建檔資料
+    `progress_${userId}`,     // 體態數值
+    `inbox_${userId}`,        // 收件匣
+    `goals_${userId}`,        // 目標
+    `daily_goals_${userId}`,  // 每日打勾目標
+    `wplan_${userId}`,        // 週計畫（營養師設定）
+    `menus_${userId}`,        // 菜單（營養師設定）
+    `ency_${userId}`,         // 教材（營養師上傳）
+    `body_notif_${userId}`,   // 體態通知
+    `btNote_${userId}`,       // 體態備註
+  ];
 
   const fetchUrl = async (url) => {
     const res = await fetch(url, { headers: SB_HDRS });
@@ -95,10 +104,11 @@ async function warmCache(userId) {
   };
 
   try {
-    const results = await Promise.all([
-      fetchUrl(url1), fetchUrl(url2), fetchUrl(url3),
-      fetchUrl(url4), fetchUrl(url5), fetchUrl(url6)
-    ]);
+    // 每個 prefix 發一個 gte/lte 範圍查詢，全部並行
+    const requests = prefixes.map(p =>
+      fetchUrl(`${SB_URL}/rest/v1/cd?key=gte.${encodeURIComponent(p)}&key=lte.${encodeURIComponent(p + '~')}&select=key,value&limit=500`)
+    );
+    const results = await Promise.all(requests);
     results.flat().forEach(({ key, value }) => {
       _cache[key] = value;
       try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
@@ -799,7 +809,8 @@ function renderHome() {
   }).length;
   const pct = passed ? Math.round(done / passed * 100) : 0;
 
-  const prog = gs(`progress_${currentUser.id}`) || DEFAULT_PROGRESS;
+  const wGroupsTmp = buildWeekGroups(COURSE_DATES);
+  const prog = gs(`progress_${currentUser.id}`) || getDefaultProgress(wGroupsTmp.length || 1);
   const wGroups = buildWeekGroups(COURSE_DATES);
   const curWeekIdx = wGroups.findIndex(wg => wg.dates.includes(todayStr));
   const curWeek = curWeekIdx >= 0 ? curWeekIdx + 1 : 1;
@@ -893,24 +904,20 @@ function renderHome() {
   </div>
 
   <div class="card">
-    <div class="card-title">✅ 飲食紀錄完成率</div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span style="font-size:13px;color:var(--gray-500)">已完成 ${done} / 共 ${passed} 天</span>
-      <span style="font-size:18px;font-weight:700;color:var(--green)">${pct}%</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="card-title" style="margin:0">🎯 第 ${curWeek} 週每日小目標</div>
+      ${goals.length > 0 ? `<span style="font-size:13px;font-weight:700;color:${doneCount===goals.length?'var(--green)':'var(--gray-500)'}">${doneCount}/${goals.length} ✓</span>` : ''}
     </div>
-    <div style="background:var(--gray-200);height:8px;border-radius:4px;overflow:hidden">
-      <div style="background:var(--green);height:100%;width:${pct}%;border-radius:4px;transition:width 0.5s"></div>
-    </div>
-  </div>
-
-  <div class="card" style="cursor:pointer" onclick="showPage('goals')">
-    <div class="card-title">第 ${curWeek} 週每日目標完成（今日）</div>
-    <div style="display:flex;align-items:baseline;gap:8px">
-      <div style="font-size:30px;font-weight:700;color:var(--green)">${doneCount}</div>
-      <div style="font-size:16px;color:var(--gray-400)">/ ${goals.length || '?'} 項</div>
-      ${goals.length && doneCount === goals.length ? '<div style="font-size:18px">🎉</div>' : ''}
-    </div>
-    ${goals.length === 0 ? '<div style="font-size:12px;color:var(--gray-400);margin-top:4px">等待營養師設定本週目標</div>' : '<div style="font-size:12px;color:var(--gray-400);margin-top:4px">每天凌晨自動歸零，每日都要達成 💪</div>'}
+    ${goals.length === 0
+      ? `<div style="font-size:13px;color:var(--gray-400);padding:8px 0;text-align:center">等待營養師設定本週目標 💪</div>`
+      : goals.map((g, i) => `
+    <div onclick="homeToggleGoal(${i},${curWeek})" style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--gray-100);cursor:pointer">
+      <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${dailyDone[i]?'var(--green)':'var(--gray-300)'};background:${dailyDone[i]?'var(--green)':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s">
+        ${dailyDone[i]?'<svg width="12" height="12" viewBox="0 0 12 12"><polyline points="1.5,6 4.5,9 10.5,3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>':''}
+      </div>
+      <div style="font-size:14px;color:${dailyDone[i]?'var(--gray-400)':'var(--gray-700)'};text-decoration:${dailyDone[i]?'line-through':'none'};flex:1;line-height:1.4">${g.text}</div>
+    </div>`).join('')}
+    ${goals.length > 0 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:8px;text-align:center">每天凌晨自動歸零，每日都要達成 💪</div>` : ''}
   </div>
 
   ${w1 ? `<div class="card">
@@ -922,6 +929,19 @@ function renderHome() {
       </div>`).join('')}
     </div>
   </div>` : ''}`;
+}
+
+// ── 首頁小目標打勾（直接在首頁操作） ──
+function homeToggleGoal(idx, curWeek) {
+  const userId = currentUser.id;
+  const today = getTodayKey();
+  const goals = gs(`goals_${userId}_${curWeek}`) || [];
+  const dailyDone = gs(`daily_goals_${userId}_${curWeek}_${today}`) || [];
+  const newDone = [...dailyDone];
+  newDone[idx] = !newDone[idx];
+  ss(`daily_goals_${userId}_${curWeek}_${today}`, newDone);
+  // 重新渲染首頁
+  document.getElementById('main-content').innerHTML = renderHome();
 }
 
 // ── FOOD LIST ──
@@ -1621,7 +1641,7 @@ function openProgressDetail(week) {
 }
 
 function renderProgressDetail(week) {
-  const prog = gs(`progress_${currentUser.id}`) || JSON.parse(JSON.stringify(DEFAULT_PROGRESS));
+  const prog = gs(`progress_${currentUser.id}`) || getDefaultProgress(buildWeekGroups(COURSE_DATES).length || 1);
   const p = prog[week - 1] || {};
   const plan = gs(`wplan_${currentUser.id}_${week}`) || {};
   const goals = gs(`goals_${currentUser.id}_${week}`) || [];
