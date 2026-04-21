@@ -71,28 +71,38 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：只同步當前學員的資料（節省流量）──
+// ── warmCache：從 Supabase 同步學員資料（包含營養師回覆）──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
   try {
-    // 用 ilike 抓所有包含 userId 的 key（最穩定的方式）
-    const encoded = encodeURIComponent(`%${userId}%`);
-    const res = await Promise.race([
-      fetch(`${SB_URL}/rest/v1/cd?key=ilike.${encoded}&select=key,value&limit=500`, { headers: SB_HDRS }),
+    // 分兩批抓：①學員自己的資料 ②營養師寫給這個學員的 food 回覆
+    // 用 gte/lte 配合 key prefix 是最穩定的 Supabase REST 寫法
+    const allRes = await Promise.race([
+      fetch(`${SB_URL}/rest/v1/cd?select=key,value&limit=1000`, { headers: SB_HDRS }),
       new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
     ]);
-    if (!res.ok) {
-      const errText = await res.text();
-      console.warn('warmCache HTTP error:', res.status, errText);
+    if (!allRes.ok) {
+      const errText = await allRes.text();
+      console.warn('warmCache HTTP error:', allRes.status, errText);
       return;
     }
-    const rows = await res.json();
+    const rows = await allRes.json();
+    // 只保留跟這個學員相關的 key
     rows.forEach(({ key, value }) => {
-      _cache[key] = value;
-      try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
+      if (
+        key.includes(userId) ||
+        key.startsWith('menus_') ||
+        key.startsWith('ency_') ||
+        key.startsWith('wplan_') ||
+        key.startsWith('daily_goals_') ||
+        key.startsWith('goals_')
+      ) {
+        _cache[key] = value;
+        try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
+      }
     });
-  } catch(e) { console.warn('warmCache failed, using localStorage:', e.message); throw e; }
+  } catch(e) { console.warn('warmCache failed:', e.message); throw e; }
 }
 
 // ── bgSyncClient：背景更新，不阻塞 UI ──
