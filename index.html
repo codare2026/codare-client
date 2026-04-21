@@ -5,65 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Co-Dare 口袋營養獅｜學員專區</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="window._fbFailed=true"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="window._fbFailed=true"></script>
 <script>
-let _db = null;
+// ── Supabase 設定 ──
+const SB_URL  = 'https://iqfnbwyjehwdbxptquyr.supabase.co';
+const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxZm5id3lqZWh3ZGJ4cHRxdXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3ODU5MjcsImV4cCI6MjA5MjM2MTkyN30.F5XSv6TKkJfek8bLmYsgvYgD7cnLGLirpNwC7SqbNDY';
+const SB_HDRS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' };
+
 const _cache = {};
+let _sbReady = true;
+let _realtimeChannel = null;
 
-(function initFirebase() {
-  try {
-    if (typeof firebase === 'undefined') throw new Error('SDK not loaded');
-    firebase.initializeApp({
-      apiKey: "AIzaSyActPbd2RRGAE4Y5UgZbKKjIUQmGHOqKPY",
-      authDomain: "codare-8aba6.firebaseapp.com",
-      projectId: "codare-8aba6",
-      storageBucket: "codare-8aba6.firebasestorage.app",
-      messagingSenderId: "259025105764",
-      appId: "1:259025105764:web:59a58f97afc6461288c071",
-      databaseURL: "https://codare-8aba6-default-rtdb.asia-southeast1.firebasedatabase.app"
-    });
-    _db = firebase.database();
-    console.log('✅ Firebase 連線成功');
-  } catch(e) {
-    console.warn('⚠️ Firebase 未連線，使用 localStorage 模式：', e.message);
-    _db = null;
-  }
-})();
-
+// ── 讀取（先 cache → localStorage，背景同步） ──
 function gs(key) {
   if (_cache[key] !== undefined) return _cache[key];
-  try { return JSON.parse(localStorage.getItem('cd_' + key)); } catch { return null; }
-}
-function ss(key, val) {
-  _cache[key] = val;
-  try { localStorage.setItem('cd_' + key, JSON.stringify(val)); } catch {}
-  if (_db) {
-    _db.ref('cd/' + key.replace(/\//g,'_sl_')).set(val === null ? null : val)
-      .catch(e => console.warn('Firebase write error:', e));
-  }
-}
-async function warmCache(userId) {
-  preloadLocalCache();   // 立刻從 localStorage 載入（< 0.1 秒）
-  if (!_db) return;
-  try {
-    const snap = await Promise.race([
-      _db.ref('cd').orderByKey().once('value'),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
-    ]);
-    if (snap && snap.exists()) {
-      snap.forEach(child => {
-        const k = child.key.replace(/_sl_/g, '/');
-        _cache[k] = child.val();
-        try { localStorage.setItem('cd_' + k, JSON.stringify(child.val())); } catch {}
-      });
-    }
-  } catch(e) {
-    console.warn('Firebase sync failed, using localStorage:', e.message);
-  }
+  try { const v = localStorage.getItem('cd_' + key); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 
+// ── 寫入（cache + localStorage + Supabase 非同步） ──
+function ss(key, val) {
+  _cache[key] = val;
+  try { if (val === null) localStorage.removeItem('cd_' + key); else localStorage.setItem('cd_' + key, JSON.stringify(val)); } catch {}
+  sbWrite(key, val);
+}
+
+async function sbWrite(key, val) {
+  try {
+    if (val === null) {
+      await fetch(`${SB_URL}/rest/v1/cd?key=eq.${encodeURIComponent(key)}`, { method: 'DELETE', headers: SB_HDRS });
+    } else {
+      await fetch(`${SB_URL}/rest/v1/cd`, {
+        method: 'POST', headers: SB_HDRS,
+        body: JSON.stringify({ key, value: val })
+      });
+    }
+  } catch(e) { console.warn('Supabase write error:', e.message); }
+}
+
+// ── 上傳圖片到 Supabase Storage（取代 base64 存資料庫）──
+async function uploadPhoto(file, userId, day, mealKey) {
+  const ext = file.type === 'image/png' ? 'png' : 'jpg';
+  const path = `${userId}/${day.replace(/\//g,'_')}/${mealKey}_${Date.now()}.${ext}`;
+  const res = await fetch(`${SB_URL}/storage/v1/object/photos/${path}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': file.type, 'x-upsert': 'true' },
+    body: file
+  });
+  if (!res.ok) throw new Error('上傳失敗');
+  return `${SB_URL}/storage/v1/object/public/photos/${path}`;
+}
+
+// ── 從 localStorage 預載 cache（瞬間啟動）──
 function preloadLocalCache() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -78,68 +69,77 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-function bgSyncClient(userId) {
-  if (!_db || !userId) return;
-  setTimeout(async () => {
-    try {
-      const snap = await _db.ref('cd').orderByKey().once('value');
-      if (!snap.exists()) return;
-      let changed = false;
-      snap.forEach(child => {
-        const k = child.key.replace(/_sl_/g, '/');
-        const newVal = child.val();
-        if (JSON.stringify(newVal) !== JSON.stringify(_cache[k])) {
-          _cache[k] = newVal;
-          try { localStorage.setItem('cd_' + k, JSON.stringify(newVal)); } catch {}
-          changed = true;
-        }
+// ── warmCache：只同步當前學員的資料（節省流量）──
+async function warmCache(userId) {
+  preloadLocalCache();
+  if (!userId) return;
+  try {
+    // 只抓這個學員相關的 key，不抓所有人
+    const prefixFilters = [
+      `food_${userId}`, `progress_${userId}`, `goals_${userId}`,
+      `daily_goals_${userId}`, `wplan_${userId}`, `menus_${userId}`,
+      `intake_${userId}`, `dynuser_${userId}`, `inbox_${userId}`,
+      `body_notif_${userId}`, `ency_${userId}`
+    ];
+    const filter = prefixFilters.map(p => `key.like.${p}%`).join(',');
+    const res = await Promise.race([
+      fetch(`${SB_URL}/rest/v1/cd?or=(${filter})&select=key,value`, { headers: SB_HDRS }),
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 6000))
+    ]);
+    if (res.ok) {
+      const rows = await res.json();
+      rows.forEach(({ key, value }) => {
+        _cache[key] = value;
+        try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
       });
-      if (changed) { updateInboxBadge(); }
-    } catch(e) {}
-  }, 200);
+    }
+  } catch(e) { console.warn('warmCache failed, using localStorage:', e.message); }
 }
 
-// ── Firebase realtime listener — no re-login needed ──
+// ── bgSyncClient：背景更新，不阻塞 UI ──
+function bgSyncClient(userId) {
+  if (!userId) return;
+  setTimeout(async () => {
+    try { await warmCache(userId); updateInboxBadge(); } catch(e) {}
+  }, 300);
+}
+
+// ── Realtime 監聽（Supabase Realtime）──
 function startRealtimeSync(userId) {
-  if (!_db || !userId) return;
-  const prefixes = [
-    `food_${userId}`,
-    `progress_${userId}`,
-    `goals_${userId}`,
-    `daily_goals_${userId}`,
-    `wplan_${userId}`,
-    `menus_${userId}`,
-    `ency_${userId}`,
-    `intake_${userId}`,
-    `dynuser_${userId}`,
-    `inbox_${userId}`
-  ];
-  _db.ref('cd').on('value', snap => {
-    if (!snap.exists()) return;
-    let updated = false;
-    snap.forEach(child => {
-      const k = child.key.replace(/_sl_/g, '/');
-      if (prefixes.some(p => k.startsWith(p))) {
-        const newVal = child.val();
-        if (JSON.stringify(newVal) !== JSON.stringify(_cache[k])) {
-          _cache[k] = newVal;
-          try { localStorage.setItem('cd_' + k, JSON.stringify(newVal)); } catch {}
-          updated = true;
+  if (_realtimeChannel) return;
+  try {
+    // 使用 Supabase Realtime via WebSocket
+    const wsUrl = `${SB_URL.replace('https','wss')}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`;
+    const ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ topic: 'realtime:public:cd', event: 'phx_join', payload: {}, ref: '1' }));
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.event === 'postgres_changes' || msg.event === 'INSERT' || msg.event === 'UPDATE') {
+          const record = msg.payload?.record || msg.payload?.new;
+          if (record?.key && record.key.startsWith(`food_${userId}`)) {
+            _cache[record.key] = record.value;
+            try { localStorage.setItem('cd_' + record.key, JSON.stringify(record.value)); } catch {}
+            if (currentFoodDay) {
+              document.getElementById('main-content').innerHTML = renderFoodEntry(currentFoodDay);
+            } else if (currentPage === 'home') {
+              document.getElementById('main-content').innerHTML = renderHome();
+            }
+            updateInboxBadge();
+          }
+          if (record?.key?.startsWith(`inbox_${userId}`)) {
+            _cache[record.key] = record.value;
+            try { localStorage.setItem('cd_' + record.key, JSON.stringify(record.value)); } catch {}
+            updateInboxBadge();
+            if (currentPage === 'home') document.getElementById('main-content').innerHTML = renderHome();
+          }
         }
-      }
-    });
-    if (updated && currentUser && document.getElementById('app')?.style.display !== 'none') {
-      updateInboxBadge();
-      const page = currentPage;
-      if (page === 'food' && currentFoodDay) {
-        document.getElementById('main-content').innerHTML = renderFoodEntry(currentFoodDay);
-      } else if (page === 'home') {
-        document.getElementById('main-content').innerHTML = renderHome();
-      } else if (page === 'inbox') {
-        document.getElementById('main-content').innerHTML = renderInbox();
-      }
-    }
-  });
+      } catch(e) {}
+    };
+    _realtimeChannel = ws;
+  } catch(e) { console.warn('Realtime init failed:', e.message); }
 }
 </script>
 <style>
@@ -421,6 +421,10 @@ body { font-family: 'Noto Sans TC', sans-serif; background: var(--gray-50); colo
   border-top-color: var(--green); border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+.inline-loading {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 60px 20px; text-align: center;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -601,17 +605,14 @@ function togglePw() {
 }
 
 async function findUser(id, pw) {
-  // 1. Check hardcoded users
   if (USERS[id] && USERS[id].password === pw) return { ...USERS[id], id };
-  // 2. Check Firebase for dynamically created accounts
   try {
-    const snap = await _db.ref('cd/dynuser_' + id).once('value');
-    if (snap.exists()) {
-      const dyn = snap.val();
-      if (dyn && dyn.password === pw) return { ...dyn, id };
+    const res = await fetch(`${SB_URL}/rest/v1/cd?key=eq.dynuser_${id}&select=value`, { headers: SB_HDRS });
+    if (res.ok) {
+      const rows = await res.json();
+      if (rows[0]?.value?.password === pw) return { ...rows[0].value, id };
     }
   } catch(e) {}
-  // 3. Fallback to localStorage (offline)
   try {
     const dyn = JSON.parse(localStorage.getItem('cd_dynuser_' + id));
     if (dyn && dyn.password === pw) return { ...dyn, id };
@@ -706,10 +707,15 @@ function showPage(page) {
     const el = document.getElementById('nav-' + p);
     if (el) el.classList.toggle('active', p === page);
   });
-  renderPage();
+  // Show loading briefly while rendering (prevents blank flash)
+  const el = document.getElementById('main-content');
+  el.innerHTML = `<div class="inline-loading">
+    <div class="loading-spinner"></div>
+    <div style="font-size:13px;color:var(--gray-400)">載入中…</div>
+  </div>`;
+  // Use requestAnimationFrame to let browser paint loading first, then render
+  requestAnimationFrame(() => requestAnimationFrame(() => renderPage()));
 }
-
-document.getElementById('login-pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
 // ══════════ TOAST ══════════
 function showToast(msg) {
@@ -736,7 +742,8 @@ async function syncClientData() {
     await warmCache(currentUser.id);
     if (btn) btn.style.opacity = '';
     showToast('✅ 資料已同步！');
-    document.getElementById('main-content').innerHTML = renderHome();
+    // Stay on current page, just refresh it
+    renderPage();
     updateInboxBadge();
   } catch(e) {
     if (btn) btn.style.opacity = '';
@@ -1728,18 +1735,44 @@ function triggerImgGallery(mealKey) {
 function handleImgUpload(event, day, mealKey) {
   const files = Array.from(event.target.files);
   if (!files.length) return;
-  let loaded = 0;
-  const results = [];
-  files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      results.push(e.target.result);
-      loaded++;
-      if (loaded === files.length) appendImgs(day, mealKey, results);
-    };
-    reader.readAsDataURL(file);
-  });
   event.target.value = '';
+  showToast('📤 壓縮並上傳中…');
+  let done = 0;
+  const urls = [];
+
+  files.forEach(file => {
+    const img = new Image();
+    const blobUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX = 900;
+      let w = img.width, h = img.height;
+      if (w > h && w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      else if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(blobUrl);
+      canvas.toBlob(async (blob) => {
+        try {
+          const url = await uploadPhoto(blob, currentUser.id, day, mealKey);
+          urls.push(url);
+        } catch(e) {
+          // fallback: compressed base64
+          const r = new FileReader();
+          r.onload = ev => urls.push(ev.target.result);
+          r.readAsDataURL(blob);
+        }
+        done++;
+        if (done === files.length) appendImgs(day, mealKey, urls);
+      }, 'image/jpeg', 0.75);
+    };
+    img.onerror = () => {
+      const reader = new FileReader();
+      reader.onload = e => { urls.push(e.target.result); done++; if (done === files.length) appendImgs(day, mealKey, urls); };
+      reader.readAsDataURL(file);
+    };
+    img.src = blobUrl;
+  });
 }
 
 function appendImgs(day, mealKey, newImgs) {
