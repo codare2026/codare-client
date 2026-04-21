@@ -33,8 +33,10 @@ async function sbWrite(key, val) {
     if (val === null) {
       await fetch(`${SB_URL}/rest/v1/cd?key=eq.${encodeURIComponent(key)}`, { method: 'DELETE', headers: SB_HDRS });
     } else {
+      // 使用 upsert（merge-duplicates）確保跨裝置同步
       await fetch(`${SB_URL}/rest/v1/cd`, {
-        method: 'POST', headers: SB_HDRS,
+        method: 'POST',
+        headers: { ...SB_HDRS, 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify({ key, value: val })
       });
     }
@@ -633,13 +635,11 @@ async function doLogin() {
     document.getElementById('login-error').style.display = 'none';
     if (keep) localStorage.setItem('cd_autologin', JSON.stringify({ id, pw }));
     else localStorage.removeItem('cd_autologin');
-    // Preload localStorage instantly, launch UI immediately
-    preloadLocalCache();
+    // 從 Supabase 同步此學員最新資料（跨裝置）
+    try { await warmCache(id); } catch(e) { preloadLocalCache(); }
     document.getElementById('loading-screen').style.display = 'none';
     document.getElementById('login-screen').style.display = 'none';
     launchApp();
-    // Sync Firebase in background
-    bgSyncClient(id);
   } else {
     document.getElementById('login-error').style.display = 'block';
   }
@@ -685,10 +685,10 @@ function doLogout() {
         const u = await findUser(saved.id, saved.pw);
         if (u) {
           currentUser = u;
-          preloadLocalCache();  // instant
+          // 從 Supabase 同步此學員最新資料（跨裝置）
+          try { await warmCache(saved.id); } catch(e) { preloadLocalCache(); }
           document.getElementById('loading-screen').style.display = 'none';
           launchApp();
-          bgSyncClient(saved.id);  // Firebase in background
           return;
         }
       }
@@ -737,16 +737,32 @@ function renderPage() {
 // ── HOME ──
 async function syncClientData() {
   const btn = document.querySelector('[onclick="syncClientData()"]');
-  if (btn) btn.style.opacity = '0.5';
+  if (btn) { btn.style.opacity = '0.5'; btn.textContent = '🔄 同步中…'; }
   try {
-    await warmCache(currentUser.id);
-    if (btn) btn.style.opacity = '';
+    // Direct Supabase fetch — only current user's data
+    const userId = currentUser.id;
+    const prefixes = [
+      `food_${userId}`, `progress_${userId}`, `goals_${userId}`,
+      `daily_goals_${userId}`, `wplan_${userId}`, `menus_${userId}`,
+      `intake_${userId}`, `dynuser_${userId}`, `inbox_${userId}`,
+      `body_notif_${userId}`, `ency_${userId}`
+    ];
+    const filter = prefixes.map(p => `key.like.${p}%`).join(',');
+    const res = await fetch(`${SB_URL}/rest/v1/cd?or=(${filter})&select=key,value`, { headers: SB_HDRS });
+    if (res.ok) {
+      const rows = await res.json();
+      rows.forEach(({ key, value }) => {
+        _cache[key] = value;
+        try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
+      });
+    }
+    if (btn) { btn.style.opacity = ''; btn.textContent = '🔄 同步資料'; }
     showToast('✅ 資料已同步！');
-    // Stay on current page, just refresh it
+    // Stay on current page — just re-render it
     renderPage();
     updateInboxBadge();
   } catch(e) {
-    if (btn) btn.style.opacity = '';
+    if (btn) { btn.style.opacity = ''; btn.textContent = '🔄 同步資料'; }
     showToast('⚠️ 同步失敗，請檢查網路');
   }
 }
@@ -1339,7 +1355,7 @@ function renderInbox() {
   const iconMap = { feedback: '🥦', weekplan: '📋', bodytrack: '⚖️', menu: '🥗', materials: '📚', general: '📬' };
   const actionMap = {
     feedback: (m) => `goToFeedbackDay('${m.day || ''}')`,
-    weekplan: () => `showPage('body')`,
+    weekplan: () => `showPage('goals')`,
     bodytrack: () => `showPage('body')`,
     menu: () => `showPage('menu')`,
     materials: () => `showPage('materials')`,
