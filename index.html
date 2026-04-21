@@ -537,12 +537,12 @@ const DEFAULT_GOALS = {
   2: [], 3: [], 4: []
 };
 
-const DEFAULT_PROGRESS = [
-  { week: 'W1', weight: null, fat: null, waist: null, muscle: null },
-  { week: 'W2', weight: null, fat: null, waist: null, muscle: null },
-  { week: 'W3', weight: null, fat: null, waist: null, muscle: null },
-  { week: 'W4', weight: null, fat: null, waist: null, muscle: null }
-];
+// DEFAULT_PROGRESS 改為動態產生，依照課程週數自動計算（不寫死四週）
+function getDefaultProgress(totalWeeks) {
+  return Array.from({ length: totalWeeks }, (_, i) => ({
+    week: `W${i+1}`, weight: null, fat: null, waist: null, muscle: null
+  }));
+}
 
 // Weekly nutritionist plan (set by RD, read-only for student)
 // Weekly plans are set by RD, default empty
@@ -1127,22 +1127,30 @@ function renderBody() {
   const totalWeeks = wGroups.length || 1;
 
   const savedProg = gs(`progress_${currentUser.id}`) || [];
+  const defaultProg = getDefaultProgress(totalWeeks);
   const prog = Array.from({ length: totalWeeks }, (_, i) =>
-    savedProg[i] || { week: `W${i+1}`, weight: null, fat: null, waist: null, muscle: null }
+    savedProg[i] || defaultProg[i]
   );
 
   const w1 = prog[0]?.weight;
   const latest = [...prog].reverse().find(p => p.weight);
   const change = (w1 && latest && latest !== prog[0]) ? (latest.weight - w1).toFixed(1) : null;
 
-  const rows = prog.map((p, i) => `
+  const rows = prog.map((p, i) => {
+    const wg = wGroups[i];
+    const dateRange = wg ? `${wg.dates[0]}–${wg.dates[wg.dates.length-1]}` : '';
+    return `
     <tr>
-      <td style="font-weight:700;color:var(--gray-700)">W${i+1}</td>
+      <td style="font-weight:700;color:var(--gray-700)">
+        <div>W${i+1}</div>
+        <div style="font-size:10px;color:var(--gray-400);font-weight:400">${dateRange}</div>
+      </td>
       <td><input type="number" inputmode="decimal" step="0.1" value="${p.weight || ''}" placeholder="--" data-pi="${i}" data-pf="weight" oninput="updateProg(this)"></td>
       <td><input type="number" inputmode="decimal" step="0.1" value="${p.fat || ''}" placeholder="--" data-pi="${i}" data-pf="fat" oninput="updateProg(this)"></td>
       <td><input type="number" inputmode="decimal" step="0.1" value="${p.waist || ''}" placeholder="--" data-pi="${i}" data-pf="waist" oninput="updateProg(this)"></td>
       <td><input type="number" inputmode="decimal" step="0.1" value="${p.muscle || ''}" placeholder="--" data-pi="${i}" data-pf="muscle" oninput="updateProg(this)"></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   return `
   <div class="page-title">身體數值追蹤</div>
@@ -1197,7 +1205,7 @@ function updateProg(el) {
   const savedProg = gs(`progress_${currentUser.id}`) || [];
   const prog = Array.from({ length: totalWeeks }, (_, j) =>
     savedProg[j] || { week: `W${j+1}`, weight: null, fat: null, waist: null, muscle: null }
-  );
+  ); // updateProg inline default OK
   prog[i][f] = el.value ? parseFloat(el.value) : null;
   ss(`progress_${currentUser.id}`, prog);
 }
