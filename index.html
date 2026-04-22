@@ -90,24 +90,24 @@ async function warmCache(userId) {
   const rangeGet = (prefix) =>
     safeGet(`${SB_URL}/rest/v1/cd?key=gte.${encodeURIComponent(prefix)}&key=lte.${encodeURIComponent(prefix + '~')}&select=key,value&limit=500`);
 
-  // 精確 key 用 in()（ency_/menus_ 等固定 key）
-  const exactKeys = [
-    `dynuser_${userId}`, `intake_${userId}`, `progress_${userId}`,
-    `menus_${userId}`, `ency_${userId}`, `inbox_${userId}`,
-    `body_notif_${userId}`, `btNote_${userId}`,
+  // 全部用 rangeGet（gte/lte），完全不用 in() 或 LIKE，最穩定
+  const prefixes = [
+    `ency_${userId}`,         // 教材
+    `menus_${userId}`,        // 菜單
+    `dynuser_${userId}`,      // 學員資料
+    `intake_${userId}`,       // 建檔
+    `progress_${userId}`,     // 體態
+    `inbox_${userId}`,        // 收件匣
+    `body_notif_${userId}`,   // 體態通知
+    `btNote_${userId}`,       // 體態備註
+    `food_${userId}_`,        // 飲食
+    `wplan_${userId}_`,       // 週計畫
+    `goals_${userId}_`,       // 目標
+    `daily_goals_${userId}_`, // 每日目標
   ];
-  const inFilter = exactKeys.map(k => `"${k}"`).join(',');
 
-  // 有日期後綴的 key 用 gte/lte（避開 _ 萬用字元）
-  const [exactRows, foodRows, wplanRows, goalsRows, dgRows] = await Promise.all([
-    safeGet(`${SB_URL}/rest/v1/cd?key=in.(${inFilter})&select=key,value`),
-    rangeGet(`food_${userId}_`),
-    rangeGet(`wplan_${userId}_`),
-    rangeGet(`goals_${userId}_`),
-    rangeGet(`daily_goals_${userId}_`),
-  ]);
-
-  [...exactRows, ...foodRows, ...wplanRows, ...goalsRows, ...dgRows].forEach(({ key, value }) => {
+  const allRows = await Promise.all(prefixes.map(p => rangeGet(p)));
+  allRows.flat().forEach(({ key, value }) => {
     _cache[key] = value;
     try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
   });
