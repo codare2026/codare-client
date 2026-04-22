@@ -71,36 +71,31 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：用手機號碼 ilike 查詢，只抓本學員資料 ──
+// ── warmCache：用手機號碼查詢，只抓本學員相關資料 ──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
 
-  // 手機號碼全是數字，ilike.*userId* 安全可靠
-  // 一次查詢抓所有包含此手機號的 key（food_/ency_/menus_/dynuser_ 等）
-  const hdrs = { ...SB_HDRS, 'Prefer': 'count=none' };
+  // GET 用獨立 headers（不影響 POST upsert）
+  const GET_HDRS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 
-  const safeGet = async (url) => {
-    try {
-      const res = await Promise.race([
-        fetch(url, { headers: hdrs }),
-        new Promise((_, r) => setTimeout(() => r(new Error('t')), 5000))
-      ]);
-      if (!res.ok) return [];
-      return await res.json();
-    } catch(e) { return []; }
-  };
-
-  const rows = await safeGet(
-    `${SB_URL}/rest/v1/cd?key=ilike.*${userId}*&select=key,value&limit=500`
-  );
-
-  if (!Array.isArray(rows)) return;
-  rows.forEach(({ key, value }) => {
-    if (!key) return;
-    _cache[key] = value;
-    try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
-  });
+  try {
+    // 手機號碼全是數字，ilike 用 % 萬用字元，完全安全
+    // %25 = URL encoded %，因為 % 本身在 URL 中需要編碼
+    const url = `${SB_URL}/rest/v1/cd?key=ilike.%25${userId}%25&select=key,value&limit=500`;
+    const res = await Promise.race([
+      fetch(url, { headers: GET_HDRS }),
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+    ]);
+    if (!res.ok) return;
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return;
+    rows.forEach(({ key, value }) => {
+      if (!key) return;
+      _cache[key] = value;
+      try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
+    });
+  } catch(e) { console.warn('warmCache failed:', e.message); }
 }
 
 // ── bgSyncClient：背景更新，不阻塞 UI ──
