@@ -2269,13 +2269,14 @@ function renderMaterials() {
 
     const galleryHTML = items.map((item, i) => {
       const globalIdx = activeItems.indexOf(item);
-      if (item.fileData && (item.fileType === 'image')) {
+      if ((item.fileUrl || item.fileData) && (item.fileType === 'image')) {
+        const imgSrc = item.fileUrl || item.fileData;
         // Image thumbnail
         return `<div onclick="openEncyPreview(${globalIdx})" style="cursor:pointer;border-radius:10px;overflow:hidden;background:#f1f5f9;aspect-ratio:1;position:relative">
-          <img src="${item.fileData}" style="width:100%;height:100%;object-fit:cover">
+          <img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover">
           <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.45);padding:4px 6px;font-size:10px;color:#fff;line-height:1.3">${item.fileName || ''}</div>
         </div>`;
-      } else if (item.fileData && item.fileType === 'pdf') {
+      } else if ((item.fileUrl || item.fileData) && item.fileType === 'pdf') {
         return `<div onclick="openEncyPreview(${globalIdx})" style="cursor:pointer;border-radius:10px;background:#fee2e2;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
           <div style="font-size:32px">📄</div>
           <div style="font-size:10px;color:var(--gray-600);text-align:center;padding:0 6px;word-break:break-all">${item.fileName || 'PDF'}</div>
@@ -2323,10 +2324,10 @@ function openEncyPreview_course(courseIdx) {
   if (!item || !item.fileData) { showToast('此課程尚無附件'); return; }
   if (item.fileType === 'pdf') {
     const w = window.open();
-    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${item.fileData}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
+    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${src}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
   } else {
     const w = window.open();
-    if (w) w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${item.fileData}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
+    if (w) w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
   }
 }
 
@@ -2518,10 +2519,7 @@ function handleImgUpload(event, day, mealKey) {
           const url = await uploadPhoto(blob, currentUser.id, day, mealKey);
           urls.push(url);
         } catch(e) {
-          // fallback: compressed base64
-          const r = new FileReader();
-          r.onload = ev => urls.push(ev.target.result);
-          r.readAsDataURL(blob);
+          showToast('⚠️ 照片上傳失敗，請確認網路後重試');
         }
         done++;
         if (done === files.length) appendImgs(day, mealKey, urls);
@@ -2593,11 +2591,12 @@ function openEncyPreview(idx) {
   const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
   const items = (gs(`ency_${currentUser.id}`) || []).filter(i => !i.uploadedAt || (now - i.uploadedAt) <= ONE_YEAR);
   const item = items[idx];
-  if (!item || !item.fileData) { showToast('此教材無附加檔案'); return; }
+  const src = item?.fileUrl || item?.fileData;
+  if (!src) { showToast('此教材無附加檔案'); return; }
 
   if (item.fileType === 'pdf') {
     const w = window.open();
-    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${item.fileData}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
+    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${src}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
     return;
   }
 
