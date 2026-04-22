@@ -71,15 +71,19 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：gte/lte 範圍查詢，避開 SQL _ 萬用字元問題 ──
+// ── warmCache：用手機號碼 ilike 查詢，只抓本學員資料 ──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
 
+  // 手機號碼全是數字，ilike.*userId* 安全可靠
+  // 一次查詢抓所有包含此手機號的 key（food_/ency_/menus_/dynuser_ 等）
+  const hdrs = { ...SB_HDRS, 'Prefer': 'count=none' };
+
   const safeGet = async (url) => {
     try {
       const res = await Promise.race([
-        fetch(url, { headers: SB_HDRS }),
+        fetch(url, { headers: hdrs }),
         new Promise((_, r) => setTimeout(() => r(new Error('t')), 5000))
       ]);
       if (!res.ok) return [];
@@ -87,27 +91,13 @@ async function warmCache(userId) {
     } catch(e) { return []; }
   };
 
-  const rangeGet = (prefix) =>
-    safeGet(`${SB_URL}/rest/v1/cd?key=gte.${encodeURIComponent(prefix)}&key=lte.${encodeURIComponent(prefix + '~')}&select=key,value&limit=500`);
+  const rows = await safeGet(
+    `${SB_URL}/rest/v1/cd?key=ilike.*${userId}*&select=key,value&limit=500`
+  );
 
-  // 全部用 rangeGet（gte/lte），完全不用 in() 或 LIKE，最穩定
-  const prefixes = [
-    `ency_${userId}`,         // 教材
-    `menus_${userId}`,        // 菜單
-    `dynuser_${userId}`,      // 學員資料
-    `intake_${userId}`,       // 建檔
-    `progress_${userId}`,     // 體態
-    `inbox_${userId}`,        // 收件匣
-    `body_notif_${userId}`,   // 體態通知
-    `btNote_${userId}`,       // 體態備註
-    `food_${userId}_`,        // 飲食
-    `wplan_${userId}_`,       // 週計畫
-    `goals_${userId}_`,       // 目標
-    `daily_goals_${userId}_`, // 每日目標
-  ];
-
-  const allRows = await Promise.all(prefixes.map(p => rangeGet(p)));
-  allRows.flat().forEach(({ key, value }) => {
+  if (!Array.isArray(rows)) return;
+  rows.forEach(({ key, value }) => {
+    if (!key) return;
     _cache[key] = value;
     try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
   });
