@@ -37,7 +37,7 @@ async function sbWrite(key, val) {
       await fetch(`${SB_URL}/rest/v1/cd`, {
         method: 'POST',
         headers: { ...SB_HDRS, 'Prefer': 'resolution=merge-duplicates' },
-        body: JSON.stringify({ key, value: val })
+        body: JSON.stringify({ key, value: val, updated_at: new Date().toISOString() })
       });
     }
   } catch(e) { console.warn('Supabase write error:', e.message); }
@@ -71,31 +71,49 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：用手機號碼查詢，只抓本學員相關資料 ──
+// ── warmCache：增量同步，節省流量 ──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
 
-  // GET 用獨立 headers（不影響 POST upsert）
   const GET_HDRS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 
-  try {
-    // 手機號碼全是數字，ilike 用 % 萬用字元，完全安全
-    // %25 = URL encoded %，因為 % 本身在 URL 中需要編碼
-    const url = `${SB_URL}/rest/v1/cd?key=ilike.%25${userId}%25&select=key,value&limit=500`;
-    const res = await Promise.race([
-      fetch(url, { headers: GET_HDRS }),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
-    ]);
-    if (!res.ok) return;
-    const rows = await res.json();
-    if (!Array.isArray(rows)) return;
-    rows.forEach(({ key, value }) => {
-      if (!key) return;
-      _cache[key] = value;
-      try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
-    });
-  } catch(e) { console.warn('warmCache failed:', e.message); }
+  const safeGet = async (url) => {
+    try {
+      const res = await Promise.race([
+        fetch(url, { headers: GET_HDRS }),
+        new Promise((_, r) => setTimeout(() => r(new Error('t')), 6000))
+      ]);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    } catch(e) { return []; }
+  };
+
+  const lastSyncKey = 'cd_last_sync_' + userId;
+  const lastSync = localStorage.getItem(lastSyncKey);
+  const now = new Date().toISOString();
+
+  let rows;
+  if (lastSync) {
+    // 增量：只抓上次同步後有變動的（例如營養師新增回覆）
+    rows = await safeGet(
+      `${SB_URL}/rest/v1/cd?updated_at=gt.${encodeURIComponent(lastSync)}&key=ilike.%25${userId}%25&select=key,value&limit=200&order=updated_at`
+    );
+  } else {
+    // 第一次：抓此學員所有資料
+    rows = await safeGet(
+      `${SB_URL}/rest/v1/cd?key=ilike.%25${userId}%25&select=key,value&limit=300`
+    );
+  }
+
+  rows.forEach(({ key, value }) => {
+    if (!key) return;
+    _cache[key] = value;
+    try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
+  });
+
+  if (rows.length >= 0) localStorage.setItem(lastSyncKey, now);
 }
 
 // ── bgSyncClient：背景更新，不阻塞 UI ──
@@ -693,6 +711,13 @@ function doLogout() {
   document.getElementById('keep-login').checked = false;
   // Clear cache on logout
   Object.keys(_cache).forEach(k => delete _cache[k]);
+  // 清除增量同步時間戳
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('cd_last_sync_')) localStorage.removeItem(k);
+    }
+  } catch(e) {}
 }
 
 // Auto-login check on page load
