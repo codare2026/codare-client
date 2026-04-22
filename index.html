@@ -71,14 +71,10 @@ function preloadLocalCache() {
   } catch(e) {}
 }
 
-// ── warmCache：精確 key 查詢，最快最穩定 ──
+// ── warmCache：gte/lte 範圍查詢，避開 SQL _ 萬用字元問題 ──
 async function warmCache(userId) {
   preloadLocalCache();
   if (!userId) return;
-
-  // 策略：用 eq 精確查固定 key（dynuser/intake/progress/menus/ency/inbox 等），
-  // 加上 like 查有日期後綴的 key（food_/goals_/daily_goals_/wplan_）
-  // 全部並行，每個請求都很小很快
 
   const safeGet = async (url) => {
     try {
@@ -91,34 +87,27 @@ async function warmCache(userId) {
     } catch(e) { return []; }
   };
 
-  // 精確 key（固定，用 in 一次抓）
+  const rangeGet = (prefix) =>
+    safeGet(`${SB_URL}/rest/v1/cd?key=gte.${encodeURIComponent(prefix)}&key=lte.${encodeURIComponent(prefix + '~')}&select=key,value&limit=500`);
+
+  // 精確 key 用 in()（ency_/menus_ 等固定 key）
   const exactKeys = [
-    `dynuser_${userId}`,
-    `intake_${userId}`,
-    `progress_${userId}`,
-    `menus_${userId}`,
-    `ency_${userId}`,
-    `inbox_${userId}`,
-    `body_notif_${userId}`,
-    `btNote_${userId}`,
+    `dynuser_${userId}`, `intake_${userId}`, `progress_${userId}`,
+    `menus_${userId}`, `ency_${userId}`, `inbox_${userId}`,
+    `body_notif_${userId}`, `btNote_${userId}`,
   ];
   const inFilter = exactKeys.map(k => `"${k}"`).join(',');
 
-  // 有後綴的 key 用 like（food_/wplan_/goals_/daily_goals_）
-  const likeKeys = [
-    `food_${userId}`,
-    `wplan_${userId}`,
-    `goals_${userId}`,
-    `daily_goals_${userId}`,
-  ];
-  const likeFilter = likeKeys.map(p => `key.like.${p}%`).join(',');
-
-  const [exactRows, likeRows] = await Promise.all([
+  // 有日期後綴的 key 用 gte/lte（避開 _ 萬用字元）
+  const [exactRows, foodRows, wplanRows, goalsRows, dgRows] = await Promise.all([
     safeGet(`${SB_URL}/rest/v1/cd?key=in.(${inFilter})&select=key,value`),
-    safeGet(`${SB_URL}/rest/v1/cd?or=(${likeFilter})&select=key,value&limit=500`),
+    rangeGet(`food_${userId}_`),
+    rangeGet(`wplan_${userId}_`),
+    rangeGet(`goals_${userId}_`),
+    rangeGet(`daily_goals_${userId}_`),
   ]);
 
-  [...exactRows, ...likeRows].forEach(({ key, value }) => {
+  [...exactRows, ...foodRows, ...wplanRows, ...goalsRows, ...dgRows].forEach(({ key, value }) => {
     _cache[key] = value;
     try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
   });
