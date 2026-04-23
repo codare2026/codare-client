@@ -1334,8 +1334,8 @@ async function doLogin() {
   if (u) {
     currentUser = u;
     document.getElementById('login-error').style.display = 'none';
-    if (keep) localStorage.setItem('cd_autologin', JSON.stringify({ id, pw }));
-    else localStorage.removeItem('cd_autologin');
+    // 永遠維持登入（除非使用者主動登出）
+    localStorage.setItem('cd_autologin', JSON.stringify({ id, pw }));
     // 立即啟動 App，背景同步（不讓使用者等待）
     preloadLocalCache();
     document.getElementById('loading-screen').style.display = 'none';
@@ -1464,7 +1464,8 @@ async function syncClientData() {
   if (btn) { btn.style.opacity = '0.5'; btn.textContent = '🔄 同步中…'; }
   try {
     const userId = currentUser.id;
-    // 用 warmCache 完整同步此學員所有資料（包含營養師回覆）
+    // 手動同步：清除增量時間戳，強制完整同步
+    localStorage.removeItem('cd_last_sync_' + userId);
     await warmCache(userId);
     if (btn) { btn.style.opacity = ''; btn.textContent = '🔄 同步資料'; }
     showToast('✅ 資料已同步！');
