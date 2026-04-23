@@ -1787,6 +1787,24 @@ function renderFoodEntry(day) {
       <input type="number" id="l-poop" value="${saved.poop || ''}" placeholder="1" inputmode="numeric">
     </div>
     <div class="life-field full">
+      <label>今日心情 😊</label>
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);margin-bottom:6px;padding:0 2px">
+          <span>😔 0 不好</span><span>😊 10 很好</span>
+        </div>
+        <div style="display:flex;gap:4px;justify-content:space-between">
+          ${[0,1,2,3,4,5,6,7,8,9,10].map(n => {
+            const selected = (saved.moodScore !== undefined && saved.moodScore !== null) ? Number(saved.moodScore) === n : false;
+            const color = n <= 3 ? '#ef4444' : n <= 6 ? '#f59e0b' : '#22c55e';
+            return `<button type="button" onclick="selectMood(${n})" id="mood-btn-${n}"
+              style="flex:1;padding:7px 2px;border:2px solid ${selected ? color : 'var(--gray-200)'};border-radius:8px;background:${selected ? color : '#fff'};color:${selected ? '#fff' : 'var(--gray-500)'};font-size:13px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:inherit">${n}</button>`;
+          }).join('')}
+        </div>
+        <input type="hidden" id="l-mood" value="${saved.moodScore !== undefined ? saved.moodScore : ''}">
+      </div>
+      <input type="text" id="l-mood-note" value="${saved.moodNote || ''}" placeholder="心情描述（可選）…" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'">
+    </div>
+    <div class="life-field full">
       <label>飲食札記（今天的感受、心情、或困惑都可以寫）</label>
       <textarea id="l-note" placeholder="今天吃了什麼讓你開心或困擾？都歡迎告訴我們！">${saved.lifeNote || ''}</textarea>
     </div>
@@ -1800,9 +1818,37 @@ function renderFoodEntry(day) {
   <div class="${hasOverall ? 'rd-box' : 'rd-box'}" style="${!hasOverall ? 'background:var(--gray-50);border-left-color:var(--gray-300)' : ''}">
     <div class="rd-box-title" style="${!hasOverall ? 'color:var(--gray-500)' : ''}">🥦 整日回饋</div>
     ${overallHTML}
-    ${notified && !hasOverall ? '<div style="font-size:12px;color:var(--gray-400);margin-top:6px">⏳ 已通知，營養師將在平日 22:00 前回覆</div>' : ''}
+    ${notified && !hasOverall ? (() => {
+      const [m, d] = day.split('/').map(Number);
+      const dt = new Date(new Date().getFullYear(), m-1, d);
+      const dow = dt.getDay(); // 0=日,1=一,...,6=六
+      const msg = (dow >= 1 && dow <= 4)
+        ? '⏳ 已通知，營養師將在隔日 22:00 前回覆'
+        : '⏳ 已通知，營養師將統一在週一 22:00 前回覆';
+      return `<div style="font-size:12px;color:var(--gray-400);margin-top:6px">${msg}</div>`;
+    })() : ''}
     ${hasOverall ? '<div style="font-size:12px;color:var(--primary);margin-top:6px;font-weight:500">✅ 營養師已回饋</div>' : ''}
   </div>`;
+}
+
+function selectMood(score) {
+  document.getElementById('l-mood').value = score;
+  [0,1,2,3,4,5,6,7,8,9,10].forEach(n => {
+    const btn = document.getElementById('mood-btn-' + n);
+    if (!btn) return;
+    const color = n <= 3 ? '#ef4444' : n <= 6 ? '#f59e0b' : '#22c55e';
+    if (n === score) {
+      btn.style.background = color;
+      btn.style.borderColor = color;
+      btn.style.color = '#fff';
+      btn.style.transform = 'scale(1.15)';
+    } else {
+      btn.style.background = '#fff';
+      btn.style.borderColor = 'var(--gray-200)';
+      btn.style.color = 'var(--gray-500)';
+      btn.style.transform = 'scale(1)';
+    }
+  });
 }
 
 function backToList() {
@@ -1824,7 +1870,9 @@ function getFoodData(day) {
     water: document.getElementById('l-water')?.value || '',
     sleep: document.getElementById('l-sleep')?.value || '',
     poop: document.getElementById('l-poop')?.value || '',
-    lifeNote: document.getElementById('l-note')?.value || ''
+    lifeNote: document.getElementById('l-note')?.value || '',
+    moodScore: document.getElementById('l-mood')?.value !== '' ? Number(document.getElementById('l-mood')?.value) : null,
+    moodNote: document.getElementById('l-mood-note')?.value || ''
   };
 }
 
