@@ -1878,7 +1878,15 @@ function getFoodData(day) {
 
 function saveFoodDay(day) {
   const existing = gs(`food_${currentUser.id}_${day}`) || {};
-  ss(`food_${currentUser.id}_${day}`, { ...existing, ...getFoodData(day) });
+  const newData = getFoodData(day);
+  // 只要有任何飲食內容就標記 hasData，讓營養師知道有更新
+  const hasAnyMeal = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k => newData[k]?.trim());
+  ss(`food_${currentUser.id}_${day}`, {
+    ...existing,
+    ...newData,
+    hasData: hasAnyMeal || existing.hasData || false,
+    lastUpdated: new Date().toISOString()
+  });
   showToast('✅ 紀錄已儲存！');
 }
 
