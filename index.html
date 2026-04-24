@@ -7,6 +7,33 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 <script>
 // ── Supabase 設定 ──
+// OneSignal 推播輔助
+const OS_APP_ID = "d76da6d5-8058-40dc-acd5-cc6c5c55ec98";
+const OS_API_KEY = "os_v2_app_25w2nvmalbanzlgvzrwfyvpmtdemxnrvsvpukcemyq34xmr4gwbammw2wclrvpdobawlmkcvpkcjem2dykaflggiwzvysl77eflzura";
+
+async function sendPushToRd(rdId, title, body) {
+  // 從 Supabase 查 RD 的 OneSignal player ID
+  try {
+    const GET_HDRS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+    const res = await fetch(`${SB_URL}/rest/v1/cd?key=eq.onesignal_rd_${rdId}&select=value`, { headers: GET_HDRS });
+    if (!res.ok) return;
+    const rows = await res.json();
+    const playerId = rows[0]?.value?.playerId;
+    if (!playerId) return;
+    await fetch('https://api.onesignal.com/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${OS_API_KEY}` },
+      body: JSON.stringify({
+        app_id: OS_APP_ID,
+        include_subscription_ids: [playerId],
+        headings: { en: title, zh: title },
+        contents: { en: body, zh: body },
+        url: 'https://codare2026.github.io/codare-rd/'
+      })
+    });
+  } catch(e) { console.warn('Push failed:', e.message); }
+}
+
 const SB_URL  = 'https://iqfnbwyjehwdbxptquyr.supabase.co';
 const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxZm5id3lqZWh3ZGJ4cHRxdXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3ODU5MjcsImV4cCI6MjA5MjM2MTkyN30.F5XSv6TKkJfek8bLmYsgvYgD7cnLGLirpNwC7SqbNDY';
 const SB_HDRS = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' };
@@ -1120,6 +1147,28 @@ body {
   text-align: center;
 }
 </style>
+  <!-- OneSignal Web Push -->
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({ appId: "d76da6d5-8058-40dc-acd5-cc6c5c55ec98", notifyButton: { enable: false } });
+      // 訂閱後儲存 player ID 到 Supabase
+      OneSignal.User.PushSubscription.addEventListener('change', async (e) => {
+        if (e.current.optedIn && e.current.id) {
+          const userId = window._currentUserId;
+          if (userId) {
+            const key = 'onesignal_' + userId;
+            const GET_HDRS = { 'apikey': window._SB_KEY, 'Authorization': 'Bearer ' + window._SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' };
+            await fetch(window._SB_URL + '/rest/v1/cd', {
+              method: 'POST', headers: GET_HDRS,
+              body: JSON.stringify({ key, value: { playerId: e.current.id, userId }, updated_at: new Date().toISOString() })
+            });
+          }
+        }
+      });
+    });
+  </script>
 </head>
 <body>
 
@@ -1356,6 +1405,27 @@ async function doLogin() {
 }
 
 function launchApp() {
+  // 讓 OneSignal handler 能拿到 userId
+  window._currentUserId = currentUser?.id;
+  window._SB_URL = SB_URL;
+  window._SB_KEY = SB_KEY;
+  // 請求推播權限
+  if (window.OneSignal) {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async (OneSignal) => {
+      try { await OneSignal.Notifications.requestPermission(); } catch(e) {}
+      // 儲存 player ID
+      const playerId = OneSignal.User.PushSubscription.id;
+      if (playerId && currentUser?.id) {
+        const key = 'onesignal_' + currentUser.id;
+        await fetch(`${SB_URL}/rest/v1/cd`, {
+          method: 'POST',
+          headers: { ...SB_HDRS, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify({ key, value: { playerId, userId: currentUser.id }, updated_at: new Date().toISOString() })
+        });
+      }
+    });
+  }
   const startDate = currentUser.start || '2026/05/25';
   const endDate   = currentUser.end   || null;
   COURSE_DATES.length = 0;
@@ -1900,6 +1970,9 @@ function notifyRD(day) {
   const btn = document.getElementById('notify-btn');
   if (btn) { btn.classList.add('sent'); btn.innerHTML = '✅ 已通知營養師'; }
   showToast('🎉 已通知營養師，等待回饋！');
+  // 推播通知給營養師
+  const rdId = currentUser.rd || 'tingxuan';
+  sendPushToRd(rdId, `📋 ${currentUser.name} 上傳飲食紀錄`, `${currentUser.name} 已上傳 ${day} 的飲食日記，請上線查看！`);
 }
 
 // ── BODY DATA ──
