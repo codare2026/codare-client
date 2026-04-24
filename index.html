@@ -1709,8 +1709,9 @@ function renderFoodEntry(day) {
 
   const mealHTML = meals.map(m => {
     const imgs = (saved[m.key + '_imgs'] || []);
+    const mealId = m.key + '_' + day.replace(/\//g,'_');
     const thumbs = imgs.map((src, i) => `
-      <div class="img-thumb-wrap" style="cursor:zoom-in" onclick="openPhotoLightbox(${JSON.stringify(imgs)},${i})">
+      <div class="img-thumb-wrap" style="cursor:zoom-in" data-mealid="${mealId}" data-idx="${i}" onclick="clickThumb(this)">
         <img class="img-thumb" src="${src}" alt="餐點照片">
         <button class="img-thumb-del" onclick="event.stopPropagation();delMealImg('${day}','${m.key}',${i})" type="button">✕</button>
       </div>`).join('');
@@ -2614,6 +2615,16 @@ function delMealImg(day, mealKey, idx) {
   showToast('🗑️ 已刪除，可重新上傳');
 }
 
+// 從 DOM 收集同一組的所有圖片 src，再開 lightbox
+function clickThumb(el) {
+  const mealId = el.dataset.mealid;
+  const idx = parseInt(el.dataset.idx);
+  // 找同一組的所有縮圖
+  const siblings = document.querySelectorAll(`[data-mealid="${mealId}"]`);
+  const srcs = Array.from(siblings).map(w => w.querySelector('img')?.src).filter(Boolean);
+  if (srcs.length) openPhotoLightbox(srcs, idx);
+}
+
 function openPhotoLightbox(srcs, startIdx) {
   // 移除舊的
   const old = document.getElementById('img-lightbox');
@@ -2656,8 +2667,9 @@ function refreshImgPreview(mealKey, day, imgs) {
   const uploadBtns = document.getElementById('upload-btns-' + mealKey);
 
   if (previewRow) {
+    const previewId = mealKey + '_' + day.replace(/\//g,'_');
     previewRow.innerHTML = imgs.map((src, i) => `
-      <div class="img-thumb-wrap" style="cursor:zoom-in" onclick="openPhotoLightbox(${JSON.stringify(imgs)},${i})">
+      <div class="img-thumb-wrap" style="cursor:zoom-in" data-mealid="${previewId}" data-idx="${i}" onclick="clickThumb(this)">
         <img class="img-thumb" src="${src}" alt="餐點照片">
         <button class="img-thumb-del" onclick="event.stopPropagation();delMealImg('${day}','${mealKey}',${i})" type="button">✕</button>
       </div>`).join('');
