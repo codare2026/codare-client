@@ -1710,9 +1710,9 @@ function renderFoodEntry(day) {
   const mealHTML = meals.map(m => {
     const imgs = (saved[m.key + '_imgs'] || []);
     const thumbs = imgs.map((src, i) => `
-      <div class="img-thumb-wrap">
+      <div class="img-thumb-wrap" style="cursor:zoom-in" onclick="openPhotoLightbox(${JSON.stringify(imgs)},${i})">
         <img class="img-thumb" src="${src}" alt="餐點照片">
-        <button class="img-thumb-del" onclick="delMealImg('${day}','${m.key}',${i})" type="button">✕</button>
+        <button class="img-thumb-del" onclick="event.stopPropagation();delMealImg('${day}','${m.key}',${i})" type="button">✕</button>
       </div>`).join('');
     // Support array of feedback (new) or single string (old)
     const mealFbArr = Array.isArray(saved[m.key + '_rdFeedbacks'])
@@ -2614,15 +2614,52 @@ function delMealImg(day, mealKey, idx) {
   showToast('🗑️ 已刪除，可重新上傳');
 }
 
+function openPhotoLightbox(srcs, startIdx) {
+  // 移除舊的
+  const old = document.getElementById('img-lightbox');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'img-lightbox';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;';
+
+  let cur = startIdx;
+  const render = () => {
+    overlay.innerHTML = `
+      <button onclick="document.getElementById('img-lightbox').remove()"
+        style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:26px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)">✕</button>
+      ${srcs.length > 1 ? `<div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.7);font-size:13px">${cur+1} / ${srcs.length}</div>` : ''}
+      <img src="${srcs[cur]}" style="max-width:95vw;max-height:80vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.5)"
+        onclick="event.stopPropagation()">
+      ${srcs.length > 1 ? `
+        <div style="display:flex;gap:16px;margin-top:20px">
+          <button onclick="event.stopPropagation();cur=${cur > 0 ? 'cur-1' : srcs.length-1};render()" id="lb-prev"
+            style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:20px;width:48px;height:48px;border-radius:50%;cursor:pointer;backdrop-filter:blur(4px)">‹</button>
+          <button onclick="event.stopPropagation();cur=${cur < srcs.length-1 ? 'cur+1' : 0};render()" id="lb-next"
+            style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:20px;width:48px;height:48px;border-radius:50%;cursor:pointer;backdrop-filter:blur(4px)">›</button>
+        </div>` : ''}
+    `;
+    // Rebind arrow buttons properly
+    const prev = overlay.querySelector('#lb-prev');
+    const next = overlay.querySelector('#lb-next');
+    if (prev) prev.onclick = (e) => { e.stopPropagation(); cur = cur > 0 ? cur-1 : srcs.length-1; render(); };
+    if (next) next.onclick = (e) => { e.stopPropagation(); cur = cur < srcs.length-1 ? cur+1 : 0; render(); };
+  };
+
+  render();
+  overlay.addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
+}
+
 function refreshImgPreview(mealKey, day, imgs) {
   const previewRow = document.getElementById('preview-' + mealKey);
   const uploadBtns = document.getElementById('upload-btns-' + mealKey);
 
   if (previewRow) {
     previewRow.innerHTML = imgs.map((src, i) => `
-      <div class="img-thumb-wrap">
+      <div class="img-thumb-wrap" style="cursor:zoom-in" onclick="openPhotoLightbox(${JSON.stringify(imgs)},${i})">
         <img class="img-thumb" src="${src}" alt="餐點照片">
-        <button class="img-thumb-del" onclick="delMealImg('${day}','${mealKey}',${i})" type="button">✕</button>
+        <button class="img-thumb-del" onclick="event.stopPropagation();delMealImg('${day}','${mealKey}',${i})" type="button">✕</button>
       </div>`).join('');
 
     // Update counter
