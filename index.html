@@ -1886,20 +1886,72 @@ function renderFoodEntry(day) {
     ${notified ? '✅ 已通知營養師' : '🍎 完成紀錄後按我通知營養師～'}
   </button>
 
-  <div class="${hasOverall ? 'rd-box' : 'rd-box'}" style="${!hasOverall ? 'background:var(--gray-50);border-left-color:var(--gray-300)' : ''}">
+  <div class="rd-box" style="${!hasOverall ? 'background:var(--gray-50);border-left-color:var(--gray-300)' : ''}">
     <div class="rd-box-title" style="${!hasOverall ? 'color:var(--gray-500)' : ''}">🥦 整日回饋</div>
     ${overallHTML}
     ${notified && !hasOverall ? (() => {
       const [m, d] = day.split('/').map(Number);
       const dt = new Date(new Date().getFullYear(), m-1, d);
-      const dow = dt.getDay(); // 0=日,1=一,...,6=六
+      const dow = dt.getDay();
       const msg = (dow >= 1 && dow <= 4)
         ? '⏳ 已通知，營養師將在隔日 22:00 前回覆'
         : '⏳ 已通知，營養師將統一在週一 22:00 前回覆';
       return `<div style="font-size:12px;color:var(--gray-400);margin-top:6px">${msg}</div>`;
     })() : ''}
-    ${hasOverall ? '<div style="font-size:12px;color:var(--primary);margin-top:6px;font-weight:500">✅ 營養師已回饋</div>' : ''}
-  </div>`;
+  </div>
+
+  ${hasOverall ? (() => {
+    // 學員對營養師整日回饋的回覆記錄
+    const stuReplies = Array.isArray(saved.studentReplies) ? saved.studentReplies : [];
+    const repliesHTML = stuReplies.map((r, i) => `
+      <div style="background:#fff;border:1.5px solid var(--primary-light);border-radius:10px;padding:10px 14px;margin-bottom:6px;font-size:13px;line-height:1.7;position:relative">
+        <div style="font-weight:700;color:var(--primary-dark);margin-bottom:3px">💬 我的回應</div>
+        <div style="color:var(--gray-700)">${r.text}</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:4px">${new Date(r.at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+        <button onclick="deleteStudentReply('${day}',${i})" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--gray-300);font-size:16px;cursor:pointer;padding:0;line-height:1">×</button>
+      </div>`).join('');
+    return `<div style="margin-top:4px">
+      <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px">💬 回應營養師</div>
+      ${repliesHTML}
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <textarea id="student-reply-input" placeholder="對營養師的回饋有想法嗎？可以在這裡留言…"
+          style="flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:10px;font-size:14px;font-family:inherit;resize:none;outline:none;min-height:68px;transition:border-color 0.2s"
+          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></textarea>
+        <button onclick="sendStudentReply('${day}')"
+          style="padding:10px 16px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 8px rgba(59,141,224,0.3)">送出</button>
+      </div>
+    </div>`;
+  })() : ''}`;
+}
+
+// ── 學員回覆營養師 ──
+function sendStudentReply(day) {
+  const ta = document.getElementById('student-reply-input');
+  const text = ta?.value?.trim();
+  if (!text) { showToast('請輸入回覆內容'); return; }
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
+  const replies = Array.isArray(existing.studentReplies) ? existing.studentReplies : [];
+  replies.push({ text, at: new Date().toISOString() });
+  existing.studentReplies = replies;
+  ss(key, existing);
+  ta.value = '';
+  showToast('✅ 已送出回覆！');
+  // 通知營養師
+  const rdId = currentUser.rd || 'tingxuan';
+  sendPushToRd(rdId, `💬 ${currentUser.name} 回覆了你的留言`, `${currentUser.name} 針對你的回饋留言囉，快去看看！`);
+  // 重新渲染
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+}
+
+function deleteStudentReply(day, idx) {
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
+  const replies = Array.isArray(existing.studentReplies) ? existing.studentReplies : [];
+  replies.splice(idx, 1);
+  existing.studentReplies = replies;
+  ss(key, existing);
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
 }
 
 function selectMood(score) {
