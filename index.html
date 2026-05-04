@@ -1830,6 +1830,7 @@ function renderFoodEntry(day) {
   return `
   <button class="back-btn" onclick="backToList()">‹ 返回飲食紀錄</button>
   <div class="page-title">${day} 飲食日記</div>
+  <div style="color:#ef4444;font-weight:700;font-size:13px;margin-bottom:14px;line-height:1.6">⚠️ 記得紀錄完滑到最下方點「儲存紀錄」後，需要再點「通知營養師」，營養師才能進行回饋唷～</div>
 
   ${mealHTML}
 
@@ -2091,7 +2092,15 @@ function renderBody() {
   </div>
 
   <button class="save-btn" onclick="saveProgress()">💾 儲存數值</button>
-  <button class="notify-btn" onclick="notifyBody()" style="margin-top:10px">🍎 完成後通知營養師</button>
+  ${(() => {
+    const bodyNotif = gs(`body_notif_${currentUser.id}`);
+    const alreadyNotified = bodyNotif && bodyNotif.notified;
+    return `<button class="notify-btn ${alreadyNotified ? 'sent' : ''}" id="body-notify-btn"
+      ${alreadyNotified ? '' : 'onclick="notifyBody()"'}
+      style="margin-top:10px">
+      ${alreadyNotified ? '✅ 已通知營養師' : '🍎 完成後通知營養師'}
+    </button>`;
+  })()}
 
   <div class="card" style="margin-top:4px">
     <div class="card-title">📊 營養師每週進度確認</div>
@@ -2133,7 +2142,17 @@ function notifyBody() {
     name: currentUser.name,
     rdId: currentUser.rd || null
   });
+  // 按鈕反白確認（同飲食紀錄的通知按鈕）
+  const btn = document.getElementById('body-notify-btn');
+  if (btn) {
+    btn.classList.add('sent');
+    btn.innerHTML = '✅ 已通知營養師';
+    btn.onclick = null;
+  }
   showToast('🎉 已通知營養師！等待確認中...');
+  // 推播通知給營養師
+  const rdId = currentUser.rd || 'tingxuan';
+  sendPushToRd(rdId, `⚖️ ${currentUser.name} 上傳體態數值`, `${currentUser.name} 已更新體重等數值，請上線查看！`);
 }
 
 // ── GOALS (每日打勾，每天凌晨歸零) ──
@@ -2841,7 +2860,7 @@ function openEncyPreview(idx) {
   // Build sibling image list (same category, images only)
   const catKey = item.catKey || item.desc;
   _lbItems = items.map((it, i) => ({ ...it, _origIdx: i }))
-    .filter(it => (it.catKey || it.desc) === catKey && it.fileType === 'image' && it.fileData);
+    .filter(it => (it.catKey || it.desc) === catKey && it.fileType === 'image' && (it.fileUrl || it.fileData));
   _lbIdx = _lbItems.findIndex(it => it._origIdx === idx);
   if (_lbIdx < 0) _lbIdx = 0;
 
@@ -2871,7 +2890,7 @@ function renderLightbox() {
     ${hasNext ? `<button onclick="lbNav(1)"
       style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:32px;width:48px;height:48px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;backdrop-filter:blur(4px)">›</button>` : ''}
 
-    <img src="${item.fileData}" style="max-width:88vw;max-height:82vh;object-fit:contain;border-radius:4px;user-select:none" draggable="false">
+    <img src="${item.fileUrl || item.fileData}" style="max-width:88vw;max-height:82vh;object-fit:contain;border-radius:4px;user-select:none" draggable="false">
 
     <div style="color:rgba(255,255,255,0.65);font-size:12px;margin-top:10px;display:flex;align-items:center;gap:12px">
       <span>${item.fileName || ''}</span>
