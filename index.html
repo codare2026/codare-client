@@ -1900,7 +1900,13 @@ function renderFoodEntry(day) {
     })() : ''}
   </div>
 
-  ${hasOverall ? (() => {
+  ${(() => {
+    // 只要有任何餐次或整日回饋就顯示學員回覆區
+    const hasMealFeedback = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(m =>
+      (Array.isArray(saved[m+'_rdFeedbacks']) && saved[m+'_rdFeedbacks'].length > 0) || !!saved[m+'_rdFeedback']
+    );
+    if (!hasOverall && !hasMealFeedback) return '';
+    return (() => {
     // 學員對營養師整日回饋的回覆記錄
     const stuReplies = Array.isArray(saved.studentReplies) ? saved.studentReplies : [];
     const repliesHTML = stuReplies.map((r, i) => `
@@ -1921,7 +1927,8 @@ function renderFoodEntry(day) {
           style="padding:10px 16px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 8px rgba(59,141,224,0.3)">送出</button>
       </div>
     </div>`;
-  })() : ''}`;
+    })();
+  })()}`;
 }
 
 // ── 學員回覆營養師 ──
