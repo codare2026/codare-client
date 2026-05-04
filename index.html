@@ -2132,7 +2132,22 @@ function updateProg(el) {
   ss(`progress_${currentUser.id}`, prog);
 }
 
-function saveProgress() { showToast('✅ 數值已儲存！'); }
+function saveProgress() {
+  // 儲存數值後重置通知按鈕（讓學員重新點通知）
+  const notifKey = `body_notif_${currentUser.id}`;
+  const existing = gs(notifKey) || {};
+  existing.notified = false; // 重置通知狀態
+  ss(notifKey, existing);
+
+  // 更新按鈕外觀
+  const btn = document.getElementById('body-notify-btn');
+  if (btn) {
+    btn.classList.remove('sent');
+    btn.innerHTML = '🍎 完成後通知營養師';
+    btn.onclick = notifyBody;
+  }
+  showToast('✅ 數值已儲存！');
+}
 function notifyBody() {
   const prog = gs(`progress_${currentUser.id}`) || [];
   const notifKey = `body_notif_${currentUser.id}`;
