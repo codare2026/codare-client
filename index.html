@@ -1233,7 +1233,7 @@ body {
       <div class="nav-icon">📊</div><div class="nav-label">數值</div>
     </button>
     <button class="nav-item" id="nav-goals" onclick="showPage('goals')">
-      <div class="nav-icon">🎯</div><div class="nav-label">目標</div>
+      <div class="nav-icon">🧍</div><div class="nav-label">目標</div>
     </button>
     <button class="nav-item" id="nav-materials" onclick="showPage('materials')">
       <div class="nav-icon">📚</div><div class="nav-label">教材</div>
@@ -1665,271 +1665,14 @@ function renderHome() {
       <div class="quick-btn-icon">⚖️</div><div class="quick-btn-label">身體數值追蹤</div>
     </button>
     <button class="quick-btn" onclick="showPage('goals')">
-      <div class="quick-btn-icon">🎯</div><div class="quick-btn-label">本週小目標</div>
+      <div class="quick-btn-icon">🧍</div><div class="quick-btn-label">本週計畫與目標</div>
     </button>
     <button class="quick-btn" onclick="showPage('inbox')">
       <div class="quick-btn-icon">📬</div><div class="quick-btn-label">收件夾${unread > 0 ? ` <span style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700">${unread}</span>` : ''}</div>
     </button>
   </div>
 
-  <div class="card">
-    <div class="card-title">🎯 本期目標</div>
-    <div style="font-size:14px;color:var(--gray-600);line-height:1.6">${currentUser.goal}</div>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div class="card-title" style="margin:0">🎯 第 ${curWeek} 週每日小目標</div>
-      ${goals.length > 0 ? `<span style="font-size:13px;font-weight:700;color:${doneCount===goals.length?'var(--primary)':'var(--gray-500)'}">${doneCount}/${goals.length} ✓</span>` : ''}
-    </div>
-    ${goals.length === 0
-      ? `<div style="font-size:13px;color:var(--gray-400);padding:8px 0;text-align:center">等待營養師設定本週目標 💪</div>`
-      : goals.map((g, i) => `
-    <div onclick="homeToggleGoal(${i},${curWeek})" style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--gray-100);cursor:pointer">
-      <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${dailyDone[i]?'var(--primary)':'var(--gray-300)'};background:${dailyDone[i]?'var(--primary)':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s">
-        ${dailyDone[i]?'<svg width="12" height="12" viewBox="0 0 12 12"><polyline points="1.5,6 4.5,9 10.5,3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>':''}
-      </div>
-      <div style="font-size:14px;color:${dailyDone[i]?'var(--gray-400)':'var(--gray-700)'};text-decoration:${dailyDone[i]?'line-through':'none'};flex:1;line-height:1.4">${g.text}</div>
-    </div>`).join('')}
-    ${goals.length > 0 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:8px;text-align:center">每天凌晨自動歸零，每日都要達成 💪</div>` : ''}
-  </div>
-
-  ${w1 ? `<div class="card">
-    <div class="card-title">⚖️ 體重追蹤</div>
-    <div style="display:flex;gap:12px">
-      ${prog.slice(0, wGroups.length).map((p,i) => `<div style="flex:1;text-align:center">
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">W${i+1}</div>
-        <div style="font-size:15px;font-weight:${p.weight ? '700' : '400'};color:${p.weight ? 'var(--primary-dark)' : 'var(--gray-300)'}">${p.weight ? p.weight + 'kg' : '--'}</div>
-      </div>`).join('')}
-    </div>
-  </div>` : ''}`;
-}
-
-// ── 首頁小目標打勾（直接在首頁操作） ──
-function homeToggleGoal(idx, curWeek) {
-  const userId = currentUser.id;
-  const today = getTodayKey();
-  const goals = gs(`goals_${userId}_${curWeek}`) || [];
-  const dailyDone = gs(`daily_goals_${userId}_${curWeek}_${today}`) || [];
-  const newDone = [...dailyDone];
-  newDone[idx] = !newDone[idx];
-  ss(`daily_goals_${userId}_${curWeek}_${today}`, newDone);
-  // 重新渲染首頁
-  document.getElementById('main-content').innerHTML = renderHome();
-}
-
-// ── FOOD LIST ──
-function renderFoodList() {
-  const today = new Date();
-  const todayStr = `${today.getMonth()+1}/${today.getDate()}`;
-
-  // Dynamic week grouping — 7 days per week, last week may be shorter
-  const weekDates = [];
-  for (let w = 0; w * 7 < COURSE_DATES.length; w++) {
-    weekDates.push(COURSE_DATES.slice(w * 7, (w + 1) * 7));
-  }
-  const weekLabels = weekDates.map((chunk, w) =>
-    `第${['一','二','三','四','五','六','七','八'][w] || (w+1)}週（${chunk[0]}–${chunk[chunk.length-1]}）`
-  );
-
-  let html = `<div class="page-title">每日飲食紀錄</div>
-  <div class="notice">💬 每天用餐後記錄飲食內容，記得通知營養師！</div>`;
-
-  weekDates.forEach((wdates, wi) => {
-    if (!wdates.length) return;
-    html += `<div class="week-header">${weekLabels[wi]}</div>`;
-    wdates.forEach(d => {
-      const saved = gs(`food_${currentUser.id}_${d}`);
-      const isToday = d === todayStr;
-      const [m, day] = d.split('/').map(Number);
-      const startYear = currentUser.start ? parseInt((currentUser.start||'2026').split('/')[0]) || 2026 : 2026;
-      const isPast = new Date(startYear, m-1, day) < today;
-      let icon = '⚪️';
-      if (saved && saved.notified) icon = '✅';
-      else if (saved && (saved.breakfast || saved.lunch || saved.dinner)) icon = '📝';
-      else if (isToday) icon = '👉';
-      else if (!isPast) icon = '⚪️';
-      html += `<div class="day-item" onclick="openFoodDay('${d}')">
-        <span style="font-size:18px">${icon}</span>
-        <span class="day-item-date" style="${isToday ? 'color:var(--primary-dark)' : ''}">${d}${isToday ? '（今天）' : ''}</span>
-        <span class="day-item-arrow">›</span>
-      </div>`;
-    });
-  });
-  return html;
-}
-
-// ── FOOD ENTRY ──
-function openFoodDay(day) {
-  currentFoodDay = day;
-  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
-  window.scrollTo(0, 0);
-}
-
-function renderFoodEntry(day) {
-  const saved = gs(`food_${currentUser.id}_${day}`) || {};
-  const meals = [
-    { label: '早餐', key: 'breakfast', ph: '例：蛋餅 + 豆漿、吐司夾蛋...' },
-    { label: '點心（上午）', key: 'snack1', ph: '例：堅果一小把、水果一份...' },
-    { label: '午餐', key: 'lunch', ph: '例：雞腿便當、燙青菜 + 肉片...' },
-    { label: '點心（下午）', key: 'snack2', ph: '例：優格、果汁（100%）...' },
-    { label: '晚餐', key: 'dinner', ph: '例：清炒蔬菜、蒸魚、五穀飯...' },
-    { label: '宵夜', key: 'latenight', ph: '如有宵夜習慣請記錄（盡量避免）' }
-  ];
-
-  const mealHTML = meals.map(m => {
-    const imgs = (saved[m.key + '_imgs'] || []);
-    const mealId = m.key + '_' + day.replace(/\//g,'_');
-    const thumbs = imgs.map((src, i) => `
-      <div class="img-thumb-wrap" style="cursor:zoom-in" data-mealid="${mealId}" data-idx="${i}" onclick="clickThumb(this)">
-        <img class="img-thumb" src="${src}" alt="餐點照片">
-        <button class="img-thumb-del" onclick="event.stopPropagation();delMealImg('${day}','${m.key}',${i})" type="button">✕</button>
-      </div>`).join('');
-    // Support array of feedback (new) or single string (old)
-    const mealFbArr = Array.isArray(saved[m.key + '_rdFeedbacks'])
-      ? saved[m.key + '_rdFeedbacks']
-      : (saved[m.key + '_rdFeedback'] ? [{ text: saved[m.key + '_rdFeedback'] }] : []);
-    const mealFbHTML = mealFbArr.length ? mealFbArr.map(fb => `
-      <div style="margin-top:6px;background:var(--green-light);border-left:3px solid var(--green);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--primary-dark);line-height:1.6">
-        <span style="font-weight:700">🥦 營養師：</span>${fb.text}
-      </div>`).join('') : '';
-    return `
-    <div class="meal-section">
-      <div class="meal-title">${m.label}</div>
-      <div class="img-upload-area">
-        <div class="img-upload-row" id="upload-btns-${m.key}">
-          <button class="img-upload-btn" onclick="triggerImgCamera('${m.key}')" type="button">📷 拍照</button>
-          <button class="img-upload-btn" onclick="triggerImgGallery('${m.key}')" type="button">🖼️ 從相簿選取</button>
-        </div>
-        <input class="img-upload-input" type="file" accept="image/*" capture="environment"
-          id="img-cam-${m.key}" onchange="handleImgUpload(event,'${day}','${m.key}')">
-        <input class="img-upload-input" type="file" accept="image/*" multiple
-          id="img-gal-${m.key}" onchange="handleImgUpload(event,'${day}','${m.key}')">
-        <div class="img-preview-row" id="preview-${m.key}">${thumbs}</div>
-        ${imgs.length > 0 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:4px">${imgs.length} 張｜點照片右上角 ✕ 可刪除</div>` : ''}
-      </div>
-      <textarea class="meal-textarea" id="m-${m.key}" placeholder="${m.ph}" style="margin-top:8px">${saved[m.key] || ''}</textarea>
-      ${mealFbHTML}
-    </div>`;
-  }).join('');
-
-  const notified = saved.notified;
-  // Support array (new) or single string (old)
-  const overallArr = Array.isArray(saved.rdFeedbacks)
-    ? saved.rdFeedbacks
-    : (saved.rdFeedback ? [{ text: saved.rdFeedback }] : []);
-  const hasOverall = overallArr.length > 0;
-
-  const overallHTML = hasOverall
-    ? overallArr.map(fb => `
-        <div style="background:var(--green-light);border-left:3px solid var(--green);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:13px;color:var(--primary-dark);line-height:1.7">
-          <span style="font-weight:700">🥦 營養師：</span>${fb.text}
-        </div>`).join('')
-    : `<div style="font-size:14px;color:var(--gray-400);line-height:1.6">尚未回饋，等待營養師確認中...</div>`;
-
-  return `
-  <button class="back-btn" onclick="backToList()">‹ 返回飲食紀錄</button>
-  <div class="page-title">${day} 飲食日記</div>
-  <div style="color:#ef4444;font-weight:700;font-size:13px;margin-bottom:14px;line-height:1.6">⚠️ 記得紀錄完滑到最下方點「儲存紀錄」後，需要再點「通知營養師」，營養師才能進行回饋唷～</div>
-
-  ${mealHTML}
-
-  <div class="divider"></div>
-  <div style="font-size:15px;font-weight:700;margin-bottom:14px">📝 生活細節記錄</div>
-
-  <div class="life-grid">
-    <div class="life-field">
-      <label>運動形式</label>
-      <input type="text" id="l-extype" value="${saved.exType || ''}" placeholder="例：慢跑、重訓">
-    </div>
-    <div class="life-field">
-      <label>運動時間（分鐘）</label>
-      <input type="number" id="l-exmin" value="${saved.exMin || ''}" placeholder="30" inputmode="numeric">
-    </div>
-    <div class="life-field">
-      <label>飲水量（ml）</label>
-      <input type="number" id="l-water" value="${saved.water || ''}" placeholder="1500" inputmode="numeric">
-    </div>
-    <div class="life-field">
-      <label>睡眠時間（小時）</label>
-      <input type="number" id="l-sleep" value="${saved.sleep || ''}" placeholder="7" inputmode="decimal" step="0.5">
-    </div>
-    <div class="life-field">
-      <label>排便次數</label>
-      <input type="number" id="l-poop" value="${saved.poop || ''}" placeholder="1" inputmode="numeric">
-    </div>
-    <div class="life-field full">
-      <label>今日心情 😊</label>
-      <div style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);margin-bottom:6px;padding:0 2px">
-          <span>😔 0 不好</span><span>😊 10 很好</span>
-        </div>
-        <div style="display:flex;gap:4px;justify-content:space-between">
-          ${[0,1,2,3,4,5,6,7,8,9,10].map(n => {
-            const selected = (saved.moodScore !== undefined && saved.moodScore !== null) ? Number(saved.moodScore) === n : false;
-            const color = n <= 3 ? '#ef4444' : n <= 6 ? '#f59e0b' : '#22c55e';
-            return `<button type="button" onclick="selectMood(${n})" id="mood-btn-${n}"
-              style="flex:1;padding:7px 2px;border:2px solid ${selected ? color : 'var(--gray-200)'};border-radius:8px;background:${selected ? color : '#fff'};color:${selected ? '#fff' : 'var(--gray-500)'};font-size:13px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:inherit">${n}</button>`;
-          }).join('')}
-        </div>
-        <input type="hidden" id="l-mood" value="${saved.moodScore !== undefined ? saved.moodScore : ''}">
-      </div>
-      <input type="text" id="l-mood-note" value="${saved.moodNote || ''}" placeholder="心情描述（可選）…" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'">
-    </div>
-    <div class="life-field full">
-      <label>飲食札記（今天的感受、心情、或困惑都可以寫）</label>
-      <textarea id="l-note" placeholder="今天吃了什麼讓你開心或困擾？都歡迎告訴我們！">${saved.lifeNote || ''}</textarea>
-    </div>
-  </div>
-
-  <button class="save-btn" onclick="saveFoodDay('${day}')">💾 儲存紀錄</button>
-  <button class="notify-btn ${notified ? 'sent' : ''}" id="notify-btn" onclick="notifyRD('${day}')">
-    ${notified ? '✅ 已通知營養師' : '🍎 完成紀錄後按我通知營養師～'}
-  </button>
-
-  <div class="rd-box" style="${!hasOverall ? 'background:var(--gray-50);border-left-color:var(--gray-300)' : ''}">
-    <div class="rd-box-title" style="${!hasOverall ? 'color:var(--gray-500)' : ''}">🥦 整日回饋</div>
-    ${overallHTML}
-    ${notified && !hasOverall ? (() => {
-      const [m, d] = day.split('/').map(Number);
-      const dt = new Date(new Date().getFullYear(), m-1, d);
-      const dow = dt.getDay();
-      const msg = (dow >= 1 && dow <= 4)
-        ? '⏳ 已通知，營養師將在隔日 22:00 前回覆'
-        : '⏳ 已通知，營養師將統一在週一 22:00 前回覆';
-      return `<div style="font-size:12px;color:var(--gray-400);margin-top:6px">${msg}</div>`;
-    })() : ''}
-  </div>
-
-  ${(() => {
-    // 只要有任何餐次或整日回饋就顯示學員回覆區
-    const hasMealFeedback = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(m =>
-      (Array.isArray(saved[m+'_rdFeedbacks']) && saved[m+'_rdFeedbacks'].length > 0) || !!saved[m+'_rdFeedback']
-    );
-    if (!hasOverall && !hasMealFeedback) return '';
-    return (() => {
-    // 學員對營養師整日回饋的回覆記錄
-    const stuReplies = Array.isArray(saved.studentReplies) ? saved.studentReplies : [];
-    const repliesHTML = stuReplies.map((r, i) => `
-      <div style="background:#fff;border:1.5px solid var(--primary-light);border-radius:10px;padding:10px 14px;margin-bottom:6px;font-size:13px;line-height:1.7;position:relative">
-        <div style="font-weight:700;color:var(--primary-dark);margin-bottom:3px">💬 我的回應</div>
-        <div style="color:var(--gray-700)">${r.text}</div>
-        <div style="font-size:11px;color:var(--gray-400);margin-top:4px">${new Date(r.at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-        <button onclick="deleteStudentReply('${day}',${i})" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--gray-300);font-size:16px;cursor:pointer;padding:0;line-height:1">×</button>
-      </div>`).join('');
-    return `<div style="margin-top:4px">
-      <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px">💬 回應營養師</div>
-      ${repliesHTML}
-      <div style="display:flex;gap:8px;align-items:flex-end">
-        <textarea id="student-reply-input" placeholder="對營養師的回饋有想法嗎？可以在這裡留言…"
-          style="flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:10px;font-size:14px;font-family:inherit;resize:none;outline:none;min-height:68px;transition:border-color 0.2s"
-          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></textarea>
-        <button onclick="sendStudentReply('${day}')"
-          style="padding:10px 16px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 8px rgba(59,141,224,0.3)">送出</button>
-      </div>
-    </div>`;
-    })();
-  })()}`;
+  ${renderHomeWplanCard(curWeek, prog[curWeek-1] || {})}`;
 }
 
 // ── 學員回覆營養師 ──
@@ -2103,19 +1846,9 @@ function renderBody() {
   })()}
 
   <div class="card" style="margin-top:4px">
-    <div class="card-title">📊 營養師每週進度確認</div>
-    ${prog.map((p, i) => {
-      const plan = gs(`wplan_${currentUser.id}_${i+1}`) || {};
-      return `
-    <div class="progress-item" onclick="openProgressDetail(${i+1})" style="cursor:pointer">
-      <div class="progress-week ${p.weight ? 'done' : ''}">${i+1}</div>
-      <div style="flex:1">
-        <div style="font-size:15px;font-weight:700">W${i+1} 體重：${p.weight ? p.weight + 'kg' : '尚未紀錄'}</div>
-        <div style="font-size:12px;color:var(--gray-500);">${plan.calories ? '熱量設定：'+plan.calories : '點擊查看本週計畫'}</div>
-      </div>
-      <div style="color:var(--gray-400);font-size:18px">›</div>
-    </div>`;
-    }).join('')}
+    <div class="card-title">📊 週計畫與目標</div>
+    <div style="font-size:13px;color:var(--gray-500);padding:8px 0 4px">詳細週計畫、小目標打勾請至「目標」分頁查看</div>
+    <button onclick="showPage('goals')" style="width:100%;padding:12px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;color:var(--primary-dark);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">🧍 前往本週計畫與目標 →</button>
   </div>`;
 }
 
@@ -2171,112 +1904,160 @@ function notifyBody() {
 }
 
 // ── GOALS (每日打勾，每天凌晨歸零) ──
+function parseCpvfdoBadges(str) {
+  if (!str) return '';
+  const cats = ['C','P','V','F','D','O'];
+  const labels = {C:'全穀',P:'豆魚蛋肉',V:'蔬菜',F:'水果',D:'乳品',O:'油脂'};
+  const bg = {C:'#fef3c7',P:'#ffe4e6',V:'#dcfce7',F:'#fce7f3',D:'#e0f2fe',O:'#f5f3ff'};
+  const tc = {C:'#92400e',P:'#9f1239',V:'#166534',F:'#9d174d',D:'#0369a1',O:'#5b21b6'};
+  return str.split('｜').map(s => {
+    const l = s.trim().charAt(0);
+    if (!cats.includes(l)) return '';
+    return '<span style="background:'+bg[l]+';color:'+tc[l]+';font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px">'+l+' '+labels[l]+': '+s.trim().slice(1).trim()+'</span>';
+  }).filter(Boolean).join('');
+}
+
+function renderHomeWplanCard(week, curProg) {
+  const plan = gs('wplan_'+currentUser.id+'_'+week) || {};
+  const hasPlan = plan.calories || plan.breakfast || plan.lunch || plan.dinner || plan.snack || plan.total;
+  let html = '<div class="card">';
+  html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">';
+  html += '<div class="card-title" style="margin:0">🍽️ 本週飲食目標設定</div>';
+  if (curProg && curProg.weight) html += '<span style="font-size:12px;color:var(--gray-400)">目前體重 '+curProg.weight+'kg</span>';
+  html += '</div>';
+  if (!hasPlan) {
+    html += '<div style="font-size:13px;color:var(--gray-400);padding:8px 0;text-align:center">等待營養師設定本週飲食目標 🥗</div>';
+  } else {
+    if (plan.calories) html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:13px;font-weight:700;color:var(--gray-600);width:70px">熱量設定</span><span style="font-size:16px;font-weight:700;color:var(--primary)">'+plan.calories+'</span></div>';
+    const hasMeals = plan.breakfast || plan.lunch || plan.dinner || plan.snack;
+    if (hasMeals) {
+      html += '<div style="font-size:12px;font-weight:700;color:var(--gray-500);margin:10px 0 6px">整日份數分配</div>';
+      if (plan.breakfast) html += '<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">早餐</span>'+parseCpvfdoBadges(plan.breakfast)+'</div>';
+      if (plan.lunch)     html += '<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">午餐</span>'+parseCpvfdoBadges(plan.lunch)+'</div>';
+      if (plan.dinner)    html += '<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">晚餐</span>'+parseCpvfdoBadges(plan.dinner)+'</div>';
+      if (plan.snack)     html += '<div style="padding:6px 0"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">點心</span>'+parseCpvfdoBadges(plan.snack)+'</div>';
+    }
+    if (plan.total) html += '<div style="background:var(--primary-light);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;font-weight:700;color:var(--primary-dark)">整天合計：'+plan.total+'</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderGoals() {
   const wGroups = buildWeekGroups(COURSE_DATES);
   const totalWeeks = wGroups.length || 1;
   if (currentGoalWeek > totalWeeks) currentGoalWeek = 1;
 
-  const tabs = Array.from({length: totalWeeks}, (_, i) => i+1).map(w => `
-    <button class="week-tab-btn ${w === currentGoalWeek ? 'active' : ''}" onclick="switchGoalWeek(${w})">第 ${w} 週</button>`).join('');
+  const tabs = Array.from({length: totalWeeks}, (_, i) => i+1).map(w =>
+    `<button class="week-tab-btn ${w === currentGoalWeek ? 'active' : ''}" onclick="switchGoalWeek(${w})">第 ${w} 週</button>`
+  ).join('');
 
+  const plan  = gs(`wplan_${currentUser.id}_${currentGoalWeek}`) || {};
   const goals = gs(`goals_${currentUser.id}_${currentGoalWeek}`) || [];
+  const prog  = gs(`progress_${currentUser.id}`) || getDefaultProgress(totalWeeks);
+  const curProg = prog[currentGoalWeek-1] || {};
   const today = getTodayKey();
   const dailyDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${today}`) || [];
-
-  // Build today's checklist
-  const goalItems = goals.length ? goals.map((g, i) => `
-    <div class="goal-item" style="align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
-      <div class="goal-check ${dailyDone[i] ? 'checked' : ''}" onclick="toggleDailyGoal(${i})" style="flex-shrink:0;margin-top:2px"></div>
-      <div style="flex:1">
-        <div class="goal-text ${dailyDone[i] ? 'done' : ''}" style="font-size:14px">${g.text}</div>
-        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">每天做到就打勾～每天凌晨自動歸零</div>
-      </div>
-    </div>`).join('') : `<div style="text-align:center;padding:24px 0;color:var(--gray-400);font-size:14px">
-      本週目標尚未設定<br>請等待營養師更新
-    </div>`;
-
   const doneToday = goals.filter((_, i) => dailyDone[i]).length;
 
-  // 7-day achievement per week
-  const curWeekGroup = wGroups[currentGoalWeek - 1];
-  const weekDates = curWeekGroup ? curWeekGroup.dates : [];
-  const dayRows = weekDates.map(dateStr => {
-    const [m, d] = dateStr.split('/');
-    const dt = new Date(new Date().getFullYear(), m-1, d);
-    const dayKey = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}`;
-    const dayDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${dayKey}`) || [];
-    const dayCount = goals.filter((_, i) => dayDone[i]).length;
-    const allDone = goals.length > 0 && dayCount === goals.length;
-    const isToday = dayKey === today;
-    const isFuture = dt > new Date();
-    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
-      <div style="font-size:18px">${allDone ? '✅' : isFuture ? '⬜' : goals.length === 0 ? '—' : '○'}</div>
-      <div style="flex:1;font-size:13px;font-weight:${isToday ? '700' : '400'};color:${isToday ? 'var(--primary-dark)' : 'var(--gray-600)'}">
-        週${['日','一','二','三','四','五','六'][dt.getDay()]} ${dateStr}${isToday ? '（今天）' : ''}
-      </div>
-      <div style="font-size:12px;color:${allDone ? 'var(--primary)' : 'var(--gray-400)'}">
-        ${isFuture ? '—' : goals.length ? `${dayCount}/${goals.length}` : '—'}
-      </div>
-    </div>`;
-  });
+  // CPVFDO badge parser
+  function parseCpvfdo(str) {
+    if (!str) return '';
+    const cats = ['C','P','V','F','D','O'];
+    const labels = {C:'全穀',P:'豆魚蛋肉',V:'蔬菜',F:'水果',D:'乳品',O:'油脂'};
+    const bg = {C:'#fef3c7',P:'#ffe4e6',V:'#dcfce7',F:'#fce7f3',D:'#e0f2fe',O:'#f5f3ff'};
+    const tc = {C:'#92400e',P:'#9f1239',V:'#166534',F:'#9d174d',D:'#0369a1',O:'#5b21b6'};
+    return str.split('｜').map(s => {
+      const l = s.trim().charAt(0);
+      if (!cats.includes(l)) return '';
+      return `<span style="background:${bg[l]};color:${tc[l]};font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px">${l} ${labels[l]}: ${s.trim().slice(1).trim()}</span>`;
+    }).filter(Boolean).join('');
+  }
 
+  const hasMeals = plan.breakfast || plan.lunch || plan.dinner || plan.snack;
+  const hasPlan = plan.calories || hasMeals || plan.date || plan.session || plan.weight;
+
+  // 7-day goal tracking
+  const wg = wGroups[currentGoalWeek-1];
+  const weekDates = wg ? wg.dates : [];
   const achievedDays = weekDates.filter(dateStr => {
     const [m, d] = dateStr.split('/');
     const dt = new Date(new Date().getFullYear(), m-1, d);
     if (dt > new Date()) return false;
-    const dayKey = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}`;
-    const dayDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${dayKey}`) || [];
-    return goals.length > 0 && goals.every((_, i) => dayDone[i]);
+    const dk = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}`;
+    const dd = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${dk}`) || [];
+    return goals.length > 0 && goals.every((_, i) => dd[i]);
   }).length;
-  const totalPassedDays = weekDates.filter(dateStr => {
-    const [m, d] = dateStr.split('/');
-    return new Date(new Date().getFullYear(), m-1, d) <= new Date();
-  }).length;
-  const weekPct = totalPassedDays ? Math.round(achievedDays / 7 * 100) : 0;
+  const weekPct = Math.round(achievedDays / 7 * 100);
 
   return `
-  <div class="page-title">每週小目標</div>
+  <div class="page-title">本週計畫與目標</div>
   <div class="goal-week-tab">${tabs}</div>
 
+  <!-- 本週計畫 -->
   <div class="card">
-    <div class="card-title">🎯 第 ${currentGoalWeek} 週目標（今日 ${doneToday}/${goals.length || '?'} 項完成）</div>
-    ${goalItems}
-    ${goals.length ? `<div style="margin-top:8px;font-size:12px;color:var(--gray-400)">💡 每天做到就打勾，每天凌晨 00:00 自動歸零，每日重新挑戰！</div>` : ''}
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin:0">📋 第 ${currentGoalWeek} 週計畫</div>
+      ${curProg.weight ? `<span style="font-size:12px;color:var(--gray-400)">目前體重 ${curProg.weight}kg</span>` : ''}
+    </div>
+    ${hasPlan ? `
+      ${plan.date ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">日期</span>
+        <span style="font-size:13px;color:var(--gray-700)">${plan.date}</span>
+      </div>` : ''}
+      ${plan.calories ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">熱量設定</span>
+        <span style="font-size:16px;font-weight:700;color:var(--primary)">${plan.calories}</span>
+      </div>` : ''}
+      ${plan.weight ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">目標體重</span>
+        <span style="font-size:13px;color:var(--gray-700)">${plan.weight} kg</span>
+      </div>` : ''}
+      ${plan.fat ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">目標體脂</span>
+        <span style="font-size:13px;color:var(--gray-700)">${plan.fat} %</span>
+      </div>` : ''}
+      ${plan.waist ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">目標腰圍</span>
+        <span style="font-size:13px;color:var(--gray-700)">${plan.waist} cm</span>
+      </div>` : ''}
+      ${plan.session ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">視訊課程</span>
+        <span style="font-size:13px;color:var(--teal);font-weight:600">📅 ${plan.session}</span>
+      </div>` : ''}
+      ${hasMeals ? `
+        <div style="font-size:12px;font-weight:700;color:var(--gray-500);margin:10px 0 6px">整日份數分配</div>
+        ${plan.breakfast ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">早餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.breakfast)}</span></div>` : ''}
+        ${plan.lunch ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">午餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.lunch)}</span></div>` : ''}
+        ${plan.dinner ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">晚餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.dinner)}</span></div>` : ''}
+        ${plan.snack ? `<div style="padding:6px 0"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">點心</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.snack)}</span></div>` : ''}
+        ${plan.total ? `<div style="background:var(--primary-light);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;font-weight:700;color:var(--primary-dark)">整天合計：${plan.total}</div>` : ''}
+      ` : ''}
+      ${plan.note ? `<div style="margin-top:10px;padding:10px 12px;background:var(--gray-50);border-radius:8px;font-size:13px;color:var(--gray-600);line-height:1.6">📝 ${plan.note}</div>` : ''}
+    ` : `<div style="text-align:center;padding:20px 0;color:var(--gray-400);font-size:14px">本週計畫尚未設定<br>請等待營養師更新</div>`}
   </div>
 
+  <!-- 本週小目標打勾 -->
   <div class="card">
-    <div class="card-title">📈 本週 7 天達成率
-      <span style="font-size:13px;font-weight:400;color:var(--gray-500);margin-left:8px">${achievedDays}/7 天（${weekPct}%）</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="card-title" style="margin:0">🎯 本週小目標（今日 ${doneToday}/${goals.length || '?'} 項）</div>
+      ${goals.length > 0 ? `<span style="font-size:12px;color:var(--primary);font-weight:700">${weekPct}% 達成</span>` : ''}
     </div>
-    <div style="background:var(--gray-200);height:8px;border-radius:4px;overflow:hidden;margin-bottom:14px">
-      <div style="background:var(--primary);height:100%;width:${weekPct}%;border-radius:4px;transition:width 0.4s"></div>
-    </div>
-    ${dayRows.join('')}
-    <div style="margin-top:8px;font-size:11px;color:var(--gray-400)">✅ = 當天所有目標全部完成｜○ = 部分完成或尚未完成</div>
-  </div>
-
-  ${totalWeeks > 1 ? `<div class="card">
-    <div class="card-title">📊 各週概覽</div>
-    ${Array.from({length: totalWeeks}, (_, i) => i+1).map(w => {
-      const wg2 = wGroups[w-1];
-      const wGoals = gs(`goals_${currentUser.id}_${w}`) || [];
-      const wAchieved = (wg2?.dates || []).filter(dateStr => {
-        const [m2, d2] = dateStr.split('/');
-        const dt2 = new Date(new Date().getFullYear(), m2-1, d2);
-        if (dt2 > new Date()) return false;
-        const dk = `${dt2.getFullYear()}_${dt2.getMonth()+1}_${dt2.getDate()}`;
-        const dd = gs(`daily_goals_${currentUser.id}_${w}_${dk}`) || [];
-        return wGoals.length > 0 && wGoals.every((_, i2) => dd[i2]);
-      }).length;
-      const wPct = Math.round(wAchieved / 7 * 100);
-      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <div style="width:36px;font-size:13px;font-weight:600;color:var(--gray-600)">W${w}</div>
-        <div style="flex:1;background:var(--gray-200);height:6px;border-radius:3px;overflow:hidden">
-          <div style="background:var(--primary);height:100%;width:${wPct}%;border-radius:3px;transition:width 0.4s"></div>
+    ${goals.length === 0 ? `<div style="text-align:center;padding:20px 0;color:var(--gray-400);font-size:14px">本週目標尚未設定<br>請等待營養師更新</div>` :
+      goals.map((g, i) => `
+      <div class="goal-item" style="align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
+        <div class="goal-check ${dailyDone[i] ? 'checked' : ''}" onclick="toggleDailyGoal(${i})" style="flex-shrink:0;margin-top:2px"></div>
+        <div style="flex:1">
+          <div class="goal-text ${dailyDone[i] ? 'done' : ''}" style="font-size:14px">${g.text}</div>
+          <div style="font-size:11px;color:var(--gray-400);margin-top:2px">每天做到就打勾，每天凌晨自動歸零</div>
         </div>
-        <div style="font-size:12px;color:${wPct===100?'var(--primary)':'var(--gray-500)'};width:55px;text-align:right">${wGoals.length ? wAchieved+'/7 天' : '待設定'}</div>
-      </div>`;
-    }).join('')}
+      </div>`).join('')}
+    ${goals.length ? `<div style="margin-top:8px;font-size:12px;color:var(--gray-400)">本週 7 天達成率：${achievedDays}/7 天（${weekPct}%）</div>` : ''}
+  </div>
+
+  ${plan.exercise ? `<div class="card">
+    <div class="card-title">🏃 本週運動建議</div>
+    <div style="font-size:14px;color:var(--gray-600);line-height:1.6">${plan.exercise}</div>
   </div>` : ''}`;
 }
 
