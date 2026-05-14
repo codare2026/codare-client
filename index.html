@@ -1782,74 +1782,61 @@ function notifyRD(day) {
 function renderBody() {
   const wGroups = buildWeekGroups(COURSE_DATES);
   const totalWeeks = wGroups.length || 1;
-
-  const savedProg = gs(`progress_${currentUser.id}`) || [];
+  const savedProg = gs('progress_' + currentUser.id) || [];
   const defaultProg = getDefaultProgress(totalWeeks);
-  const prog = Array.from({ length: totalWeeks }, (_, i) =>
-    savedProg[i] || defaultProg[i]
-  );
+  const prog = Array.from({ length: totalWeeks }, function(_, i) {
+    return savedProg[i] || defaultProg[i];
+  });
 
-  const w1 = prog[0]?.weight;
-  const latest = [...prog].reverse().find(p => p.weight);
-  const change = (w1 && latest && latest !== prog[0]) ? (latest.weight - w1).toFixed(1) : null;
+  const w1 = prog[0] ? prog[0].weight : null;
+  const latest = prog.slice().reverse().find(function(p) { return p.weight; });
+  const change = (w1 && latest && latest !== prog[0]) ? (parseFloat(latest.weight) - parseFloat(w1)).toFixed(1) : null;
 
-  const rows = prog.map((p, i) => {
+  let rows = '';
+  for (let i = 0; i < prog.length; i++) {
+    const p = prog[i];
     const wg = wGroups[i];
-    const dateRange = wg ? `${wg.dates[0]}–${wg.dates[wg.dates.length-1]}` : '';
-    return `
-    <tr>
-      <td style="font-weight:700;color:var(--gray-700)">
-        <div>W${i+1}</div>
-        <div style="font-size:10px;color:var(--gray-400);font-weight:400">${dateRange}</div>
-      </td>
-      <td><input type="number" inputmode="decimal" step="0.1" value="${p.weight || ''}" placeholder="--" data-pi="${i}" data-pf="weight" oninput="updateProg(this)"></td>
-      <td><input type="number" inputmode="decimal" step="0.1" value="${p.fat || ''}" placeholder="--" data-pi="${i}" data-pf="fat" oninput="updateProg(this)"></td>
-      <td><input type="number" inputmode="decimal" step="0.1" value="${p.waist || ''}" placeholder="--" data-pi="${i}" data-pf="waist" oninput="updateProg(this)"></td>
-      <td><input type="number" inputmode="decimal" step="0.1" value="${p.muscle || ''}" placeholder="--" data-pi="${i}" data-pf="muscle" oninput="updateProg(this)"></td>
-    </tr>`;
-  }).join('');
+    const dateRange = wg ? (wg.dates[0] + '–' + wg.dates[wg.dates.length-1]) : '';
+    rows += '<tr>' +
+      '<td style="font-weight:700;color:var(--gray-700)"><div>W'+(i+1)+'</div><div style="font-size:10px;color:var(--gray-400);font-weight:400">'+dateRange+'</div></td>' +
+      '<td><input type="number" inputmode="decimal" step="0.1" value="'+(p.weight||'')+'" placeholder="--" data-pi="'+i+'" data-pf="weight" oninput="updateProg(this)"></td>' +
+      '<td><input type="number" inputmode="decimal" step="0.1" value="'+(p.fat||'')+'" placeholder="--" data-pi="'+i+'" data-pf="fat" oninput="updateProg(this)"></td>' +
+      '<td><input type="number" inputmode="decimal" step="0.1" value="'+(p.waist||'')+'" placeholder="--" data-pi="'+i+'" data-pf="waist" oninput="updateProg(this)"></td>' +
+      '<td><input type="number" inputmode="decimal" step="0.1" value="'+(p.muscle||'')+'" placeholder="--" data-pi="'+i+'" data-pf="muscle" oninput="updateProg(this)"></td>' +
+      '</tr>';
+  }
 
-  return `
-  <div class="page-title">身體數值追蹤</div>
-  <div class="notice">💬 每週三填寫本週數值，填完請通知營養師！</div>
+  const bodyNotif = gs('body_notif_' + currentUser.id);
+  const alreadyNotified = bodyNotif && bodyNotif.notified;
+  const notifyBtn = '<button class="notify-btn ' + (alreadyNotified ? 'sent' : '') + '" id="body-notify-btn" ' +
+    (alreadyNotified ? '' : 'onclick="notifyBody()"') + ' style="margin-top:10px">' +
+    (alreadyNotified ? '✅ 已通知營養師' : '🍎 完成後通知營養師') + '</button>';
 
-  ${w1 && change ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-    <div class="card" style="text-align:center;margin-bottom:0">
-      <div style="font-size:22px;font-weight:700;color:var(--primary-dark)">${w1}kg</div>
-      <div style="font-size:12px;color:var(--gray-500);margin-top:2px">起始體重</div>
-    </div>
-    <div class="card" style="text-align:center;margin-bottom:0">
-      <div style="font-size:22px;font-weight:700;color:${change < 0 ? 'var(--primary)' : 'var(--red)'}">${change > 0 ? '+' : ''}${change}kg</div>
-      <div style="font-size:12px;color:var(--gray-500);margin-top:2px">目前變化</div>
-    </div>
-  </div>` : ''}
+  let changeCard = '';
+  if (w1 && change) {
+    changeCard = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
+      '<div class="card" style="text-align:center;margin-bottom:0"><div style="font-size:22px;font-weight:700;color:var(--primary-dark)">'+w1+'kg</div><div style="font-size:12px;color:var(--gray-500);margin-top:2px">起始體重</div></div>' +
+      '<div class="card" style="text-align:center;margin-bottom:0"><div style="font-size:22px;font-weight:700;color:'+(parseFloat(change)<0?'var(--primary)':'var(--red)')+'">'+( parseFloat(change)>0?'+':'')+change+'kg</div><div style="font-size:12px;color:var(--gray-500);margin-top:2px">目前變化</div></div>' +
+      '</div>';
+  }
 
-  <div class="card" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-    <table class="body-table">
-      <thead><tr>
-        <th>週次</th><th>體重(kg)</th><th>體脂(%)</th><th>腰圍(cm)</th><th>肌肉(kg)</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div style="margin-top:10px;font-size:12px;color:var(--gray-400)">點擊各欄位直接輸入數字</div>
-  </div>
-
-  <button class="save-btn" onclick="saveProgress()">💾 儲存數值</button>
-  ${(() => {
-    const bodyNotif = gs(`body_notif_${currentUser.id}`);
-    const alreadyNotified = bodyNotif && bodyNotif.notified;
-    return `<button class="notify-btn ${alreadyNotified ? 'sent' : ''}" id="body-notify-btn"
-      ${alreadyNotified ? '' : 'onclick="notifyBody()"'}
-      style="margin-top:10px">
-      ${alreadyNotified ? '✅ 已通知營養師' : '🍎 完成後通知營養師'}
-    </button>`;
-  })()}
-
-  <div class="card" style="margin-top:4px">
-    <div class="card-title">📊 週計畫與目標</div>
-    <div style="font-size:13px;color:var(--gray-500);padding:8px 0 4px">詳細週計畫、小目標打勾請至「目標」分頁查看</div>
-    <button onclick="showPage('goals')" style="width:100%;padding:12px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;color:var(--primary-dark);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">🧍 前往本週計畫與目標 →</button>
-  </div>`;
+  return '<div class="page-title">身體數值追蹤</div>' +
+    '<div class="notice">💬 每週三填寫本週數值，填完請通知營養師！</div>' +
+    changeCard +
+    '<div class="card" style="overflow-x:auto;-webkit-overflow-scrolling:touch">' +
+      '<table class="body-table">' +
+        '<thead><tr><th>週次</th><th>體重(kg)</th><th>體脂(%)</th><th>腰圍(cm)</th><th>肌肉(kg)</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+      '<div style="margin-top:10px;font-size:12px;color:var(--gray-400)">點擊各欄位直接輸入數字</div>' +
+    '</div>' +
+    '<button class="save-btn" onclick="saveProgress()">💾 儲存數值</button>' +
+    notifyBtn +
+    '<div class="card" style="margin-top:12px">' +
+      '<div class="card-title">📊 週計畫與目標</div>' +
+      '<div style="font-size:13px;color:var(--gray-500);padding:6px 0 8px">詳細週計畫、份數分配、小目標打勾請至「目標」分頁查看</div>' +
+      '<button data-pg="goals" onclick="showPage(this.dataset.pg)" style="width:100%;padding:12px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;color:var(--primary-dark);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">🧍 前往本週計畫與目標 →</button>' +
+    '</div>';
 }
 
 function updateProg(el) {
