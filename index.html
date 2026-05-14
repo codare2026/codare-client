@@ -1664,8 +1664,8 @@ function renderHome() {
     <button class="quick-btn" onclick="showPage('body')">
       <div class="quick-btn-icon">⚖️</div><div class="quick-btn-label">身體數值追蹤</div>
     </button>
-    <button class="quick-btn" onclick="showPage('goals')">
-      <div class="quick-btn-icon">🎯</div><div class="quick-btn-label">每週小目標</div>
+    <button class="quick-btn" onclick="openGoalAchievement()">
+      <div class="quick-btn-icon">🎯</div><div class="quick-btn-label">每週小目標達成率</div>
     </button>
     <button class="quick-btn" onclick="showPage('inbox')">
       <div class="quick-btn-icon">📬</div><div class="quick-btn-label">收件夾${unread > 0 ? ` <span style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700">${unread}</span>` : ''}</div>
@@ -2123,14 +2123,97 @@ function parseCpvfdoBadges(str) {
 function renderHomeWplanCard(week, curProg) {
   const plan = gs('wplan_'+currentUser.id+'_'+week) || {};
   if (!plan.calories && !plan.total) return '';
-  // 熱量 + 整天份數一行
   const calStr = plan.calories || '';
   const totalStr = plan.total || '';
-  return '<div class="card" style="padding:12px 16px;display:flex;align-items:center;gap:12px">' +
-    '<div style="font-size:11px;font-weight:700;color:var(--gray-500);flex-shrink:0">🍽️ 本週飲食目標設定</div>' +
-    (calStr ? '<div style="font-size:14px;font-weight:700;color:var(--primary);flex-shrink:0">' + calStr + '</div>' : '') +
-    (totalStr ? '<div style="font-size:12px;color:var(--gray-600);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + totalStr + '</div>' : '') +
+  return '<div class="card" style="padding:12px 16px">' +
+    '<div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:4px">🍽️ 本週飲食目標設定</div>' +
+    (calStr ? '<div style="font-size:16px;font-weight:700;color:var(--primary);margin-bottom:4px">' + calStr + '</div>' : '') +
+    (totalStr ? '<div style="font-size:12px;color:var(--gray-600);line-height:1.6">' + totalStr + '</div>' : '') +
     '</div>';
+}
+
+function openGoalAchievement() {
+  // 顯示每週小目標達成率頁面（非本週計畫）
+  const el = document.getElementById('main-content');
+  if (el) el.innerHTML = renderGoalAchievement();
+}
+
+function renderGoalAchievement() {
+  const wGroups = buildWeekGroups(COURSE_DATES);
+  const totalWeeks = wGroups.length || 1;
+  if (currentGoalWeek > totalWeeks) currentGoalWeek = 1;
+
+  const tabs = Array.from({length: totalWeeks}, (_, i) => i+1).map(w =>
+    `<button class="week-tab-btn ${w === currentGoalWeek ? 'active' : ''}" onclick="currentGoalWeek=${w};document.getElementById('main-content').innerHTML=renderGoalAchievement()">第 ${w} 週</button>`
+  ).join('');
+
+  const goals = gs(`goals_${currentUser.id}_${currentGoalWeek}`) || [];
+  const today = getTodayKey();
+  const dailyDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${today}`) || [];
+  const doneToday = goals.filter((_, i) => dailyDone[i]).length;
+
+  const goalItems = goals.length ? goals.map((g, i) => `
+    <div class="goal-item" style="align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
+      <div class="goal-check ${dailyDone[i] ? 'checked' : ''}" onclick="toggleDailyGoal(${i})" style="flex-shrink:0;margin-top:2px"></div>
+      <div style="flex:1">
+        <div class="goal-text ${dailyDone[i] ? 'done' : ''}" style="font-size:14px">${g.text}</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">每天做到就打勾，每天凌晨自動歸零</div>
+      </div>
+    </div>`).join('') : `<div style="text-align:center;padding:24px 0;color:var(--gray-400);font-size:14px">本週目標尚未設定<br>請等待營養師更新</div>`;
+
+  const wg = wGroups[currentGoalWeek - 1];
+  const weekDates = wg ? wg.dates : [];
+  const achievedDays = weekDates.filter(dateStr => {
+    const [m, d] = dateStr.split('/');
+    const dt = new Date(new Date().getFullYear(), m-1, d);
+    if (dt > new Date()) return false;
+    const dk = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}`;
+    const dd = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${dk}`) || [];
+    return goals.length > 0 && goals.every((_, i) => dd[i]);
+  }).length;
+  const weekPct = Math.round(achievedDays / 7 * 100);
+
+  const dayRows = weekDates.map(dateStr => {
+    const [m, d] = dateStr.split('/');
+    const dt = new Date(new Date().getFullYear(), m-1, d);
+    const dayKey = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}`;
+    const dayDone = gs(`daily_goals_${currentUser.id}_${currentGoalWeek}_${dayKey}`) || [];
+    const dayCount = goals.filter((_, i) => dayDone[i]).length;
+    const allDone = goals.length > 0 && dayCount === goals.length;
+    const isToday = dayKey === today;
+    const isFuture = dt > new Date();
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+      <div style="font-size:18px">${allDone ? '✅' : isFuture ? '⬜' : goals.length === 0 ? '—' : '○'}</div>
+      <div style="flex:1;font-size:13px;font-weight:${isToday ? '700' : '400'};color:${isToday ? 'var(--primary-dark)' : 'var(--gray-600)'}">
+        週${['日','一','二','三','四','五','六'][dt.getDay()]} ${dateStr}${isToday ? '（今天）' : ''}
+      </div>
+      <div style="font-size:12px;color:${allDone ? 'var(--primary)' : 'var(--gray-400)'}">
+        ${isFuture ? '—' : goals.length ? `${dayCount}/${goals.length}` : '—'}
+      </div>
+    </div>`;
+  });
+
+  return `
+  <button class="back-btn" onclick="document.getElementById('main-content').innerHTML=renderHome()">‹ 返回首頁</button>
+  <div class="page-title">每週小目標達成率</div>
+  <div class="goal-week-tab">${tabs}</div>
+
+  <div class="card">
+    <div class="card-title">🎯 第 ${currentGoalWeek} 週目標（今日 ${doneToday}/${goals.length || '?'} 項完成）</div>
+    ${goalItems}
+    ${goals.length ? `<div style="margin-top:8px;font-size:12px;color:var(--gray-400)">💡 每天做到就打勾，每天凌晨 00:00 自動歸零！</div>` : ''}
+  </div>
+
+  <div class="card">
+    <div class="card-title">📈 本週 7 天達成率
+      <span style="font-size:13px;font-weight:400;color:var(--gray-500);margin-left:8px">${achievedDays}/7 天（${weekPct}%）</span>
+    </div>
+    <div style="background:var(--gray-200);height:8px;border-radius:4px;overflow:hidden;margin-bottom:14px">
+      <div style="background:var(--primary);height:100%;width:${weekPct}%;border-radius:4px;transition:width 0.4s"></div>
+    </div>
+    ${dayRows.join('')}
+    <div style="margin-top:8px;font-size:11px;color:var(--gray-400)">✅ = 當天所有目標全部完成｜○ = 部分完成或尚未完成</div>
+  </div>`;
 }
 
 function renderGoals() {
