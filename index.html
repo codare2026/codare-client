@@ -1675,6 +1675,195 @@ function renderHome() {
   ${renderHomeWplanCard(curWeek, prog[curWeek-1] || {})}`;
 }
 
+// ── FOOD LIST ──
+function renderFoodList() {
+  const today = new Date();
+  const todayStr = `${today.getMonth()+1}/${today.getDate()}`;
+  const wGroups = buildWeekGroups(COURSE_DATES);
+
+  // Dynamic week grouping — 7 days per week, last week may be shorter
+  const weekDates = [];
+  for (let w = 0; w * 7 < COURSE_DATES.length; w++) {
+    weekDates.push(COURSE_DATES.slice(w * 7, (w + 1) * 7));
+  }
+  const weekLabels = weekDates.map((chunk, w) =>
+    `第${['一','二','三','四','五','六','七','八'][w] || (w+1)}週（${chunk[0]}–${chunk[chunk.length-1]}）`
+  );
+
+  let html = '<div class="page-title">飲食紀錄</div>';
+  weekDates.forEach((wdates, wi) => {
+    html += `<div class="week-header">${weekLabels[wi]}</div>`;
+    wdates.forEach(d => {
+      const saved = gs(`food_${currentUser.id}_${d}`) || null;
+      const isToday = d === todayStr;
+      let icon = '—';
+      if (saved && saved.notified) icon = '✅';
+      else if (saved && saved.hasData) icon = '📝';
+      const cls = isToday ? 'day-item' : 'day-item';
+      html += `<div class="${cls}" onclick="openFoodDay('${d}')" style="${isToday ? 'border-color:var(--primary);background:var(--primary-light)' : ''}">
+        <div style="font-size:18px;width:28px;text-align:center;flex-shrink:0">${icon}</div>
+        <div class="day-item-date" style="${isToday ? 'color:var(--primary-dark)' : ''}">
+          ${d}${isToday ? ' <span style="font-size:12px;font-weight:600;color:var(--primary)">(今天)</span>' : ''}
+        </div>
+        <div class="day-item-arrow">›</div>
+      </div>`;
+    });
+  });
+
+  return html;
+}
+
+function openFoodDay(day) {
+  currentFoodDay = day;
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+}
+
+function renderFoodEntry(day) {
+  const saved = gs(`food_${currentUser.id}_${day}`) || {};
+  const meals = [
+    { key: 'breakfast', label: '早餐' },
+    { key: 'snack1',    label: '點心（上午）' },
+    { key: 'lunch',     label: '午餐' },
+    { key: 'snack2',    label: '點心（下午）' },
+    { key: 'dinner',    label: '晚餐' },
+    { key: 'latenight', label: '宵夜' }
+  ];
+
+  const mealHTML = meals.map(m => {
+    const imgs = (saved[m.key + '_imgs'] || []);
+    const thumbs = imgs.map((src, i) => `
+      <div class="img-thumb-wrap" style="cursor:zoom-in" data-mealid="${m.key}_${day.replace(/\//g,'_')}" data-idx="${i}" onclick="clickThumb(this)">
+        <img class="img-thumb" src="${src}" alt="餐點照片">
+        <button class="img-thumb-del" onclick="event.stopPropagation();delMealImg('${day}','${m.key}',${i})" type="button">✕</button>
+      </div>`).join('');
+    const mealFbArr = Array.isArray(saved[m.key + '_rdFeedbacks'])
+      ? saved[m.key + '_rdFeedbacks']
+      : (saved[m.key + '_rdFeedback'] ? [{ text: saved[m.key + '_rdFeedback'] }] : []);
+    const mealFbHTML = mealFbArr.length ? mealFbArr.map(fb => `
+      <div class="rd-box" style="margin-top:8px;font-size:13px">${fb.text}</div>`).join('') : '';
+
+    return `<div class="meal-section">
+      <div class="meal-title">${m.label}</div>
+      <div class="img-upload-area">
+        <div class="img-upload-row" id="upload-btns-${m.key}">
+          <label class="img-upload-btn"><span>📷 拍照</span><input type="file" accept="image/*" capture="environment" class="img-upload-input" onchange="handleImgUpload(event,'${day}','${m.key}',true)"></label>
+          <label class="img-upload-btn"><span>🖼️ 從相簿選取</span><input type="file" accept="image/*" class="img-upload-input" onchange="handleImgUpload(event,'${day}','${m.key}',false)"></label>
+        </div>
+        <div class="img-preview-row" id="preview-${m.key}">${thumbs}</div>
+        ${imgs.length > 0 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:4px">${imgs.length} 張｜點照片右上角 ✕ 可刪除</div>` : ''}
+      </div>
+      <textarea class="meal-textarea" id="meal-${m.key}" placeholder="例：堅果一小把、水果一份...">${saved[m.key] || ''}</textarea>
+      ${mealFbHTML}
+    </div>`;
+  }).join('');
+
+  const notified = saved.notified;
+  const overallArr = Array.isArray(saved.rdFeedbacks)
+    ? saved.rdFeedbacks
+    : (saved.rdFeedback ? [{ text: saved.rdFeedback }] : []);
+  const hasOverall = overallArr.length > 0;
+  const overallHTML = overallArr.map(fb => `
+    <div style="font-size:14px;color:var(--gray-700);line-height:1.7;white-space:pre-wrap">${fb.text}</div>`).join('');
+
+  // Student reply section (show if any meal or overall feedback exists)
+  const hasMealFeedback = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k =>
+    (Array.isArray(saved[k+'_rdFeedbacks']) && saved[k+'_rdFeedbacks'].length > 0) || !!saved[k+'_rdFeedback']
+  );
+  const stuReplies = Array.isArray(saved.studentReplies) ? saved.studentReplies : [];
+  const stuReplySection = (hasOverall || hasMealFeedback) ? `
+    <div style="margin-top:4px">
+      <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px">💬 回應營養師</div>
+      ${stuReplies.map((r, i) => `
+        <div style="background:#fff;border:1.5px solid var(--primary-light);border-radius:10px;padding:10px 14px;margin-bottom:6px;font-size:13px;line-height:1.7;position:relative">
+          <div style="font-weight:700;color:var(--primary-dark);margin-bottom:3px">💬 我的回應</div>
+          <div style="color:var(--gray-700)">${r.text}</div>
+          <div style="font-size:11px;color:var(--gray-400);margin-top:4px">${new Date(r.at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+          <button onclick="deleteStudentReply('${day}',${i})" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--gray-300);font-size:16px;cursor:pointer;padding:0;line-height:1">×</button>
+        </div>`).join('')}
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <textarea id="student-reply-input" placeholder="對營養師的回饋有想法嗎？可以在這裡留言…"
+          style="flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:10px;font-size:14px;font-family:inherit;resize:none;outline:none;min-height:68px;transition:border-color 0.2s"
+          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></textarea>
+        <button onclick="sendStudentReply('${day}')"
+          style="padding:10px 16px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 8px rgba(59,141,224,0.3)">送出</button>
+      </div>
+    </div>` : '';
+
+  return `
+  <button class="back-btn" onclick="backToList()">‹ 返回飲食紀錄</button>
+  <div class="page-title">${day} 飲食日記</div>
+  <div style="color:#ef4444;font-weight:700;font-size:13px;margin-bottom:14px;line-height:1.6">⚠️ 記得紀錄完滑到最下方點「儲存紀錄」後，需要再點「通知營養師」，營養師才能進行回饋唷～</div>
+  ${mealHTML}
+  <div class="card">
+    <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:10px">📝 生活細節記錄</div>
+    <div class="life-grid">
+      <div class="life-field"><label>運動形式</label><input type="text" id="l-ex" value="${saved.exType||''}" placeholder="例：慢跑、重訓"></div>
+      <div class="life-field"><label>運動時間（分鐘）</label><input type="number" id="l-exmin" value="${saved.exMin||''}" placeholder="30"></div>
+      <div class="life-field"><label>飲水量（ml）</label><input type="number" id="l-water" value="${saved.water||''}" placeholder="1500"></div>
+      <div class="life-field"><label>睡眠時間（小時）</label><input type="number" id="l-sleep" value="${saved.sleep||''}" placeholder="7"></div>
+      <div class="life-field"><label>排便次數</label><input type="number" id="l-poop" value="${saved.poop||''}" placeholder="1"></div>
+    </div>
+    <div class="life-field full" style="margin-top:8px">
+      <label>今日心情 😊</label>
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);margin-bottom:6px;padding:0 2px">
+          <span>😔 0 不好</span><span>😊 10 很好</span>
+        </div>
+        <div style="display:flex;gap:4px;justify-content:space-between">
+          ${[0,1,2,3,4,5,6,7,8,9,10].map(n => {
+            const selected = (saved.moodScore !== undefined && saved.moodScore !== null) ? Number(saved.moodScore) === n : false;
+            const color = n <= 3 ? '#ef4444' : n <= 6 ? '#f59e0b' : '#22c55e';
+            return `<button type="button" onclick="selectMood(${n})" id="mood-btn-${n}"
+              style="flex:1;padding:7px 2px;border:2px solid ${selected ? color : 'var(--gray-200)'};border-radius:8px;background:${selected ? color : '#fff'};color:${selected ? '#fff' : 'var(--gray-500)'};font-size:13px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:inherit">${n}</button>`;
+          }).join('')}
+        </div>
+        <input type="hidden" id="l-mood" value="${saved.moodScore !== undefined ? saved.moodScore : ''}">
+      </div>
+      <input type="text" id="l-mood-note" value="${saved.moodNote || ''}" placeholder="心情描述（可選）…" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'">
+    </div>
+    <div class="life-field full" style="margin-top:8px">
+      <label>飲食札記（今天的感受、心情、或困惑都可以寫）</label>
+      <textarea id="l-note" placeholder="今天吃了什麼讓你開心或困擾？都歡迎告訴我們！" style="min-height:80px">${saved.lifeNote || ''}</textarea>
+    </div>
+  </div>
+
+  <button class="save-btn" onclick="saveFoodDay('${day}')">💾 儲存紀錄</button>
+  <button class="notify-btn ${notified ? 'sent' : ''}" id="notify-btn" onclick="notifyRD('${day}')" style="margin-top:10px">
+    ${notified ? '✅ 已通知營養師' : '🍎 完成紀錄後按我通知營養師～'}
+  </button>
+
+  <div class="rd-box" style="${!hasOverall ? 'background:var(--gray-50);border-left-color:var(--gray-300)' : ''}">
+    <div class="rd-box-title" style="${!hasOverall ? 'color:var(--gray-500)' : ''}">🥦 整日回饋</div>
+    ${overallHTML}
+    ${notified && !hasOverall ? (() => {
+      const [mo, d2] = day.split('/').map(Number);
+      const dt = new Date(new Date().getFullYear(), mo-1, d2);
+      const dow = dt.getDay();
+      const msg = (dow >= 1 && dow <= 4)
+        ? '⏳ 已通知，營養師將在隔日 22:00 前回覆'
+        : '⏳ 已通知，營養師將統一在週一 22:00 前回覆';
+      return `<div style="font-size:12px;color:var(--gray-400);margin-top:6px">${msg}</div>`;
+    })() : ''}
+  </div>
+  ${stuReplySection}`;
+}
+
+function backToList() {
+  currentFoodDay = null;
+  document.getElementById('main-content').innerHTML = renderFoodList();
+}
+
+function homeToggleGoal(idx, curWeek) {
+  const userId = currentUser.id;
+  const today = getTodayKey();
+  const goals = gs(`goals_${userId}_${curWeek}`) || [];
+  const dailyDone = gs(`daily_goals_${userId}_${curWeek}_${today}`) || [];
+  const newDone = [...dailyDone];
+  newDone[idx] = !newDone[idx];
+  ss(`daily_goals_${userId}_${curWeek}_${today}`, newDone);
+  document.getElementById('main-content').innerHTML = renderHome();
+}
+
 // ── 學員回覆營養師 ──
 function sendStudentReply(day) {
   const ta = document.getElementById('student-reply-input');
