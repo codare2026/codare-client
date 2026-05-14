@@ -1672,7 +1672,34 @@ function renderHome() {
     </button>
   </div>
 
-  ${renderHomeWplanCard(curWeek, prog[curWeek-1] || {})}`;
+  ${renderHomeWplanCard(curWeek, prog[curWeek-1] || {})}
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="card-title" style="margin:0">🎯 第 ${curWeek} 週每日小目標</div>
+      ${goals.length > 0 ? `<span style="font-size:13px;font-weight:700;color:${doneCount===goals.length?'var(--primary)':'var(--gray-500)'}">${doneCount}/${goals.length} ✓</span>` : ''}
+    </div>
+    ${goals.length === 0
+      ? `<div style="font-size:13px;color:var(--gray-400);padding:8px 0;text-align:center">等待營養師設定本週目標 💪</div>`
+      : goals.map((g, i) => `
+    <div onclick="homeToggleGoal(${i},${curWeek})" style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--gray-100);cursor:pointer">
+      <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${dailyDone[i]?'var(--primary)':'var(--gray-300)'};background:${dailyDone[i]?'var(--primary)':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s">
+        ${dailyDone[i]?'<svg width="12" height="12" viewBox="0 0 12 12"><polyline points="1.5,6 4.5,9 10.5,3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>':''}
+      </div>
+      <div style="font-size:14px;color:${dailyDone[i]?'var(--gray-400)':'var(--gray-700)'};text-decoration:${dailyDone[i]?'line-through':'none'};flex:1;line-height:1.4">${g.text}</div>
+    </div>`).join('')}
+    ${goals.length > 0 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:8px;text-align:center">每天凌晨自動歸零，每日都要達成 💪</div>` : ''}
+  </div>
+
+  ${w1 ? `<div class="card">
+    <div class="card-title">⚖️ 體重追蹤</div>
+    <div style="display:flex;gap:12px">
+      ${prog.slice(0, wGroups.length).map((p,i) => `<div style="flex:1;text-align:center">
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">W${i+1}</div>
+        <div style="font-size:15px;font-weight:${p.weight ? '700' : '400'};color:${p.weight ? 'var(--primary-dark)' : 'var(--gray-300)'}">${p.weight ? p.weight + 'kg' : '--'}</div>
+      </div>`).join('')}
+    </div>
+  </div>` : ''}`;
 }
 
 // ── FOOD LIST ──
