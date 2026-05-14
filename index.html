@@ -1665,7 +1665,7 @@ function renderHome() {
       <div class="quick-btn-icon">⚖️</div><div class="quick-btn-label">身體數值追蹤</div>
     </button>
     <button class="quick-btn" onclick="showPage('goals')">
-      <div class="quick-btn-icon">🧍</div><div class="quick-btn-label">本週計畫與目標</div>
+      <div class="quick-btn-icon">🎯</div><div class="quick-btn-label">每週小目標</div>
     </button>
     <button class="quick-btn" onclick="showPage('inbox')">
       <div class="quick-btn-icon">📬</div><div class="quick-btn-label">收件夾${unread > 0 ? ` <span style="background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700">${unread}</span>` : ''}</div>
@@ -2123,13 +2123,13 @@ function parseCpvfdoBadges(str) {
 function renderHomeWplanCard(week, curProg) {
   const plan = gs('wplan_'+currentUser.id+'_'+week) || {};
   if (!plan.calories && !plan.total) return '';
-  // 只顯示簡單一行：熱量 + 整天份數
-  let line = '';
-  if (plan.calories) line += plan.calories;
-  if (plan.total) line += (line ? '　' : '') + plan.total;
-  return '<div class="card" style="padding:12px 16px">' +
-    '<div style="font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:4px">🍽️ 本週飲食目標設定</div>' +
-    '<div style="font-size:13px;font-weight:700;color:var(--primary-dark)">' + line + '</div>' +
+  // 熱量 + 整天份數一行
+  const calStr = plan.calories || '';
+  const totalStr = plan.total || '';
+  return '<div class="card" style="padding:12px 16px;display:flex;align-items:center;gap:12px">' +
+    '<div style="font-size:11px;font-weight:700;color:var(--gray-500);flex-shrink:0">🍽️ 本週飲食目標設定</div>' +
+    (calStr ? '<div style="font-size:14px;font-weight:700;color:var(--primary);flex-shrink:0">' + calStr + '</div>' : '') +
+    (totalStr ? '<div style="font-size:12px;color:var(--gray-600);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + totalStr + '</div>' : '') +
     '</div>';
 }
 
