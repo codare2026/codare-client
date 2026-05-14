@@ -2095,28 +2095,15 @@ function parseCpvfdoBadges(str) {
 
 function renderHomeWplanCard(week, curProg) {
   const plan = gs('wplan_'+currentUser.id+'_'+week) || {};
-  const hasPlan = plan.calories || plan.breakfast || plan.lunch || plan.dinner || plan.snack || plan.total;
-  let html = '<div class="card">';
-  html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">';
-  html += '<div class="card-title" style="margin:0">🍽️ 本週飲食目標設定</div>';
-  if (curProg && curProg.weight) html += '<span style="font-size:12px;color:var(--gray-400)">目前體重 '+curProg.weight+'kg</span>';
-  html += '</div>';
-  if (!hasPlan) {
-    html += '<div style="font-size:13px;color:var(--gray-400);padding:8px 0;text-align:center">等待營養師設定本週飲食目標 🥗</div>';
-  } else {
-    if (plan.calories) html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:13px;font-weight:700;color:var(--gray-600);width:70px">熱量設定</span><span style="font-size:16px;font-weight:700;color:var(--primary)">'+plan.calories+'</span></div>';
-    const hasMeals = plan.breakfast || plan.lunch || plan.dinner || plan.snack;
-    if (hasMeals) {
-      html += '<div style="font-size:12px;font-weight:700;color:var(--gray-500);margin:10px 0 6px">整日份數分配</div>';
-      if (plan.breakfast) html += '<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">早餐</span>'+parseCpvfdoBadges(plan.breakfast)+'</div>';
-      if (plan.lunch)     html += '<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">午餐</span>'+parseCpvfdoBadges(plan.lunch)+'</div>';
-      if (plan.dinner)    html += '<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">晚餐</span>'+parseCpvfdoBadges(plan.dinner)+'</div>';
-      if (plan.snack)     html += '<div style="padding:6px 0"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">點心</span>'+parseCpvfdoBadges(plan.snack)+'</div>';
-    }
-    if (plan.total) html += '<div style="background:var(--primary-light);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;font-weight:700;color:var(--primary-dark)">整天合計：'+plan.total+'</div>';
-  }
-  html += '</div>';
-  return html;
+  if (!plan.calories && !plan.total) return '';
+  // 只顯示簡單一行：熱量 + 整天份數
+  let line = '';
+  if (plan.calories) line += plan.calories;
+  if (plan.total) line += (line ? '　' : '') + plan.total;
+  return '<div class="card" style="padding:12px 16px">' +
+    '<div style="font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:4px">🍽️ 本週飲食目標設定</div>' +
+    '<div style="font-size:13px;font-weight:700;color:var(--primary-dark)">' + line + '</div>' +
+    '</div>';
 }
 
 function renderGoals() {
