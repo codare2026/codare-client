@@ -2283,12 +2283,12 @@ function renderGoals() {
         <span style="font-size:16px;font-weight:700;color:var(--primary)">${plan.calories}</span>
       </div>` : ''}
       ${plan.weight ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
-        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">目標體重</span>
-        <span style="font-size:13px;color:var(--gray-700)">${plan.weight} kg</span>
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">本週體重</span>
+        <span style="font-size:13px;color:var(--gray-700)">${curProg.weight ? curProg.weight + ' kg（目標 ' + plan.weight + ' kg）' : plan.weight + ' kg'}</span>
       </div>` : ''}
       ${plan.fat ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
-        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">目標體脂</span>
-        <span style="font-size:13px;color:var(--gray-700)">${plan.fat} %</span>
+        <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">本週體脂</span>
+        <span style="font-size:13px;color:var(--gray-700)">${curProg.fat ? curProg.fat + ' %（目標 ' + plan.fat + ' %）' : plan.fat + ' %'}</span>
       </div>` : ''}
       ${plan.waist ? `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100)">
         <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">目標腰圍</span>
@@ -2303,10 +2303,9 @@ function renderGoals() {
         ${plan.breakfast ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">早餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.breakfast)}</span></div>` : ''}
         ${plan.lunch ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">午餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.lunch)}</span></div>` : ''}
         ${plan.dinner ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">晚餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.dinner)}</span></div>` : ''}
-        ${plan.snack ? `<div style="padding:6px 0"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">點心</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.snack)}</span></div>` : ''}
+        ${plan.snack ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">點心</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.snack)}</span></div>` : ''}
         ${plan.total ? `<div style="background:var(--primary-light);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;font-weight:700;color:var(--primary-dark)">整天合計：${plan.total}</div>` : ''}
       ` : ''}
-      ${plan.note ? `<div style="margin-top:10px;padding:10px 12px;background:var(--gray-50);border-radius:8px;font-size:13px;color:var(--gray-600);line-height:1.6">📝 ${plan.note}</div>` : ''}
     ` : `<div style="text-align:center;padding:20px 0;color:var(--gray-400);font-size:14px">本週計畫尚未設定<br>請等待營養師更新</div>`}
   </div>
 
@@ -2331,7 +2330,10 @@ function renderGoals() {
   ${plan.exercise ? `<div class="card">
     <div class="card-title">🏃 本週運動建議</div>
     <div style="font-size:14px;color:var(--gray-600);line-height:1.6">${plan.exercise}</div>
-  </div>` : ''}`;
+    ${plan.note ? `<div style="margin-top:12px;padding:10px 12px;background:var(--gray-50);border-radius:8px;font-size:13px;color:var(--gray-600);line-height:1.6">📝 ${plan.note}</div>` : ''}
+  </div>` : (plan.note ? `<div class="card">
+    <div style="font-size:13px;color:var(--gray-600);line-height:1.6">📝 ${plan.note}</div>
+  </div>` : '')}`;
 }
 
 function toggleDailyGoal(i) {
@@ -2465,12 +2467,12 @@ const COURSES = [
 ];
 
 const FOOD_CATS = [
-  { key: 'food_grain',   label: '全穀雜糧類', icon: '🍚', color: '#fef3c7', border: '#f59e0b' },
-  { key: 'food_dairy',   label: '乳品類',     icon: '🥛', color: '#e0f2fe', border: '#0ea5e9' },
-  { key: 'food_protein', label: '豆魚蛋肉類', icon: '🥩', color: '#ffe4e6', border: '#f43f5e' },
+  { key: 'food_grain',   label: '全穀雜糧類', icon: '🍚', color: '#dbeafe', border: '#3b82f6' },
+  { key: 'food_dairy',   label: '乳品類',     icon: '🥛', color: '#ede9fe', border: '#7c3aed' },
+  { key: 'food_protein', label: '豆魚蛋肉類', icon: '🥩', color: '#d1fae5', border: '#059669' },
   { key: 'food_veg',     label: '蔬菜類',     icon: '🥦', color: '#dcfce7', border: '#22c55e' },
-  { key: 'food_fruit',   label: '水果類',     icon: '🍎', color: '#fce7f3', border: '#ec4899' },
-  { key: 'food_fat',     label: '油脂類',     icon: '🥑', color: '#f5f3ff', border: '#8b5cf6' }
+  { key: 'food_fruit',   label: '水果類',     icon: '🍎', color: '#ffedd5', border: '#f97316' },
+  { key: 'food_fat',     label: '油脂類',     icon: '🥑', color: '#fef9c3', border: '#eab308' }
 ];
 
 function renderMaterials() {
