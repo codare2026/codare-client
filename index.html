@@ -2298,42 +2298,26 @@ function renderGoals() {
         <span style="font-size:13px;font-weight:600;color:var(--gray-500);width:70px;flex-shrink:0">視訊課程</span>
         <span style="font-size:13px;color:var(--teal);font-weight:600">📅 ${plan.session}</span>
       </div>` : ''}
+      ${plan.total ? `<div style="background:var(--primary-light);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;font-weight:700;color:var(--primary-dark)">整天合計：${plan.total}</div>` : ''}
       ${hasMeals ? `
-        <div style="font-size:12px;font-weight:700;color:var(--gray-500);margin:10px 0 6px">整日份數分配</div>
+        <div style="font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:6px">整日份數分配</div>
         ${plan.breakfast ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">早餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.breakfast)}</span></div>` : ''}
         ${plan.lunch ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">午餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.lunch)}</span></div>` : ''}
         ${plan.dinner ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">晚餐</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.dinner)}</span></div>` : ''}
-        ${plan.snack ? `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100)"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">點心</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.snack)}</span></div>` : ''}
-        ${plan.total ? `<div style="background:var(--primary-light);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;font-weight:700;color:var(--primary-dark)">整天合計：${plan.total}</div>` : ''}
+        ${plan.snack ? `<div style="padding:6px 0"><span style="font-size:12px;font-weight:600;color:var(--gray-500);margin-right:6px">點心</span><span style="display:inline-flex;flex-wrap:wrap;gap:3px">${parseCpvfdo(plan.snack)}</span></div>` : ''}
       ` : ''}
     ` : `<div style="text-align:center;padding:20px 0;color:var(--gray-400);font-size:14px">本週計畫尚未設定<br>請等待營養師更新</div>`}
-  </div>
-
-  <!-- 本週小目標打勾 -->
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div class="card-title" style="margin:0">🎯 本週小目標（今日 ${doneToday}/${goals.length || '?'} 項）</div>
-      ${goals.length > 0 ? `<span style="font-size:12px;color:var(--primary);font-weight:700">${weekPct}% 達成</span>` : ''}
-    </div>
-    ${goals.length === 0 ? `<div style="text-align:center;padding:20px 0;color:var(--gray-400);font-size:14px">本週目標尚未設定<br>請等待營養師更新</div>` :
-      goals.map((g, i) => `
-      <div class="goal-item" style="align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
-        <div class="goal-check ${dailyDone[i] ? 'checked' : ''}" onclick="toggleDailyGoal(${i})" style="flex-shrink:0;margin-top:2px"></div>
-        <div style="flex:1">
-          <div class="goal-text ${dailyDone[i] ? 'done' : ''}" style="font-size:14px">${g.text}</div>
-          <div style="font-size:11px;color:var(--gray-400);margin-top:2px">每天做到就打勾，每天凌晨自動歸零</div>
-        </div>
-      </div>`).join('')}
-    ${goals.length ? `<div style="margin-top:8px;font-size:12px;color:var(--gray-400)">本週 7 天達成率：${achievedDays}/7 天（${weekPct}%）</div>` : ''}
   </div>
 
   ${plan.exercise ? `<div class="card">
     <div class="card-title">🏃 本週運動建議</div>
     <div style="font-size:14px;color:var(--gray-600);line-height:1.6">${plan.exercise}</div>
-    ${plan.note ? `<div style="margin-top:12px;padding:10px 12px;background:var(--gray-50);border-radius:8px;font-size:13px;color:var(--gray-600);line-height:1.6">📝 ${plan.note}</div>` : ''}
-  </div>` : (plan.note ? `<div class="card">
-    <div style="font-size:13px;color:var(--gray-600);line-height:1.6">📝 ${plan.note}</div>
-  </div>` : '')}`;
+  </div>` : ''}
+
+  ${plan.note ? `<div class="card">
+    <div class="card-title">💧 其他生活小提醒（飲水、睡眠、壓力等）</div>
+    <div style="font-size:14px;color:var(--gray-600);line-height:1.8">${plan.note}</div>
+  </div>` : ''}`;
 }
 
 function toggleDailyGoal(i) {
@@ -2469,7 +2453,7 @@ const COURSES = [
 const FOOD_CATS = [
   { key: 'food_grain',   label: '全穀雜糧類', icon: '🍚', color: '#dbeafe', border: '#3b82f6' },
   { key: 'food_dairy',   label: '乳品類',     icon: '🥛', color: '#ede9fe', border: '#7c3aed' },
-  { key: 'food_protein', label: '豆魚蛋肉類', icon: '🥩', color: '#d1fae5', border: '#059669' },
+  { key: 'food_protein', label: '豆魚蛋肉類', icon: '🥩', color: '#d1f0e0', border: '#065f46' },
   { key: 'food_veg',     label: '蔬菜類',     icon: '🥦', color: '#dcfce7', border: '#22c55e' },
   { key: 'food_fruit',   label: '水果類',     icon: '🍎', color: '#ffedd5', border: '#f97316' },
   { key: 'food_fat',     label: '油脂類',     icon: '🥑', color: '#fef9c3', border: '#eab308' }
