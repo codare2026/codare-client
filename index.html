@@ -2542,13 +2542,17 @@ function renderMaterials() {
     const cat = FOOD_CATS.find(c => c.key === currentFoodCat);
     const items = encyItemsAll.filter(item => item.desc === currentFoodCat);
 
-    const galleryHTML = items.map((item, i) => {
-      const globalIdx = activeItems.indexOf(item);
+    const galleryHTML = items.map((item, localIdx) => {
+      // 用 activeItems 找到全局 index，找不到就用 localIdx
+      const globalIdx = activeItems.indexOf(item) >= 0 ? activeItems.indexOf(item) : localIdx;
       if ((item.fileUrl || item.fileData) && (item.fileType === 'image')) {
         const imgSrc = item.fileUrl || item.fileData;
         // Image thumbnail
         return `<div onclick="openEncyPreview(${globalIdx})" style="cursor:pointer;border-radius:10px;overflow:hidden;background:#f1f5f9;aspect-ratio:1;position:relative">
           <img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover">
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;background:rgba(0,0,0,0.3);transition:opacity 0.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+            <div style="color:#fff;font-size:24px">🔍</div>
+          </div>
           <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.45);padding:4px 6px;font-size:10px;color:#fff;line-height:1.3">${item.fileName || ''}</div>
         </div>`;
       } else if ((item.fileUrl || item.fileData) && item.fileType === 'pdf') {
@@ -2925,8 +2929,10 @@ function openEncyPreview(idx) {
 
   // Build sibling image list (same category, images only)
   const catKey = item.catKey || item.desc;
-  _lbItems = items.map((it, i) => ({ ...it, _origIdx: i }))
+  const allImages = items.map((it, i) => ({ ...it, _origIdx: i }))
     .filter(it => (it.catKey || it.desc) === catKey && it.fileType === 'image' && (it.fileUrl || it.fileData));
+  // If no siblings found, just show this item alone
+  _lbItems = allImages.length > 0 ? allImages : [{ ...item, _origIdx: idx }];
   _lbIdx = _lbItems.findIndex(it => it._origIdx === idx);
   if (_lbIdx < 0) _lbIdx = 0;
 
