@@ -2972,13 +2972,84 @@ function renderLightbox() {
   // Tap outside to close
   overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
 
-  // Swipe support
-  let touchStartX = 0;
-  overlay.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  document.body.appendChild(overlay);
+
+  // Pinch-to-zoom + pan + swipe
+  const img = overlay.querySelector('img');
+  let scale = 1, lastScale = 1;
+  let panX = 0, panY = 0, lastPanX = 0, lastPanY = 0;
+  let initDist = 0;
+  let touchStartX = 0, touchStartY = 0;
+  let isPinching = false;
+
+  function applyTransform() {
+    img.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    img.style.maxWidth = 'none';
+    img.style.maxHeight = 'none';
+    img.style.width = '88vw';
+    img.style.height = 'auto';
+  }
+
+  function resetTransform() {
+    scale = 1; panX = 0; panY = 0;
+    img.style.transform = '';
+    img.style.maxWidth = '88vw';
+    img.style.maxHeight = '82vh';
+    img.style.width = '';
+  }
+
+  overlay.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      isPinching = true;
+      initDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      lastScale = scale;
+      lastPanX = panX; lastPanY = panY;
+    } else if (e.touches.length === 1) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      lastPanX = panX; lastPanY = panY;
+      isPinching = false;
+    }
+  }, { passive: true });
+
+  overlay.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      scale = Math.min(5, Math.max(1, lastScale * dist / initDist));
+      applyTransform();
+    } else if (e.touches.length === 1 && scale > 1) {
+      e.preventDefault();
+      panX = lastPanX + (e.touches[0].clientX - touchStartX);
+      panY = lastPanY + (e.touches[0].clientY - touchStartY);
+      applyTransform();
+    }
+  }, { passive: false });
+
   overlay.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(dx) > 50) lbNav(dx < 0 ? 1 : -1);
-  });
+    if (isPinching) { isPinching = false; return; }
+    if (scale <= 1) {
+      // Swipe to navigate
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+        resetTransform();
+        lbNav(dx < 0 ? 1 : -1);
+      }
+    }
+    // Double-tap to reset
+    if (scale > 1 && e.changedTouches.length === 1) {
+      const now = Date.now();
+      if (now - (overlay._lastTap || 0) < 300) { resetTransform(); }
+      overlay._lastTap = now;
+    }
+  }, { passive: true });
 
   // Keyboard support
   overlay._keyHandler = e => {
@@ -2988,8 +3059,6 @@ function renderLightbox() {
   };
   document.addEventListener('keydown', overlay._keyHandler);
   overlay.addEventListener('remove', () => document.removeEventListener('keydown', overlay._keyHandler));
-
-  document.body.appendChild(overlay);
 }
 
 function lbNav(dir) {
