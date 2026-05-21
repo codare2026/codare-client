@@ -2448,18 +2448,35 @@ function switchMenuPeriod(p) {
 }
 
 // ── MATERIALS ──
-const COURSES = [
-  { num: 1,  title: '認識熱量與熱量赤字' },
-  { num: 2,  title: '健檢報告解密' },
-  { num: 3,  title: '豆魚蛋肉類' },
-  { num: 4,  title: '全穀雜糧類' },
-  { num: 5,  title: '蔬菜水果類' },
-  { num: 6,  title: '油脂類' },
-  { num: 7,  title: '運動營養' },
-  { num: 8,  title: '外食技巧交戰守則' },
-  { num: 9,  title: '看懂營養標示／嘴饞點心不用怕' },
-  { num: 10, title: '保健品全攻略' }
+// 前四堂固定課程
+const COURSES_FIXED = [
+  { num: 1, title: '認識熱量與熱量赤字' },
+  { num: 2, title: '健檢報告解密' },
+  { num: 3, title: '豆魚蛋肉類' },
+  { num: 4, title: '全穀雜糧類' }
 ];
+
+// 動態取得課程列表（固定4堂 + 營養師新增的）
+function getCourses() {
+  const rawItems = gs(`ency_${currentUser.id}`) || [];
+  // 找出課程 5 以後（val 為 course_custom_ 開頭或 course_5 以上）
+  const extraItems = rawItems.filter(item => {
+    const d = item.desc || item.catKey || '';
+    if (d.startsWith('course_custom_')) return true;
+    const m = d.match(/^course_(\d+)$/);
+    return m && parseInt(m[1]) > 4;
+  });
+  // 建立動態課程列表
+  const extraCourses = extraItems.map((item, i) => ({
+    num: 5 + i,
+    title: item.title || item.descLabel || `線上課程 ${5 + i}`,
+    dynamic: true,
+    encyItem: item
+  }));
+  return [...COURSES_FIXED, ...extraCourses];
+}
+
+const COURSES = COURSES_FIXED; // backward compat
 
 const FOOD_CATS = [
   { key: 'food_grain',   label: '全穀雜糧類', icon: '🍚', color: '#dbeafe', border: '#3b82f6' },
@@ -2485,10 +2502,13 @@ function renderMaterials() {
   const encyItemsAll = activeItems.filter(item => item.category !== 'course');
 
   // ── Course tab HTML ──
-  const courseHTML = COURSES.map(c => {
+  const allCourses = getCourses();
+  const courseHTML = [
+    ...allCourses.map(c => {
+
     const uploaded = courseItems.find(item => (item.catKey || item.desc) === `course_${c.num}`);
     const hasLink = uploaded && uploaded.fileType === 'link' && uploaded.linkUrl;
-    const hasFile = uploaded && uploaded.fileData;
+    const hasFile = uploaded && (uploaded.fileUrl || uploaded.fileData);
     const isClickable = hasLink || hasFile;
     const clickHandler = hasLink
       ? `onclick="window.open('${uploaded.linkUrl}','_blank')"`
@@ -2509,7 +2529,15 @@ function renderMaterials() {
       </div>
       <div style="font-size:20px;color:${isClickable?'var(--primary)':'var(--gray-300)'}">›</div>
     </div>`;
-  }).join('');
+  }),
+    // 「更多內容敬請期待」
+    `<div class="course-item" style="opacity:0.5;cursor:default">
+      <div class="course-num" style="background:var(--gray-100);color:var(--gray-400)">${allCourses.length + 1}</div>
+      <div class="course-title" style="color:var(--gray-400);font-style:italic">🔒 更多內容敬請期待</div>
+    </div>`
+  ].join('');
+
+
 
   // ── Ency tab HTML ──
   let encyHTML = '';
