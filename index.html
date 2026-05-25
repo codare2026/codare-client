@@ -1488,7 +1488,7 @@ function doLogout() {
     } catch(e) {}
     document.getElementById('loading-screen').style.display = 'none';
     document.getElementById('login-screen').style.display = 'flex';
-  }, 200);
+  }, 800);
 })();
 
 // ══════════ NAV ══════════
@@ -1948,7 +1948,7 @@ function backToList() {
 
 function getFoodData(day) {
   return {
-    breakfast: document.getElementById('m-breakfast')?.value || '',
+    breakfast: document.getElementById('meal-breakfast')?.value || '', snack1: document.getElementById('meal-snack1')?.value || '', lunch: document.getElementById('meal-lunch')?.value || '', snack2: document.getElementById('meal-snack2')?.value || '', dinner: document.getElementById('meal-dinner')?.value || '', latenight: document.getElementById('meal-latenight')?.value || '', exType: document.getElementById('l-ex')?.value || '',
     snack1: document.getElementById('m-snack1')?.value || '',
     lunch: document.getElementById('m-lunch')?.value || '',
     snack2: document.getElementById('m-snack2')?.value || '',
@@ -1969,7 +1969,7 @@ function saveFoodDay(day) {
   const existing = gs(`food_${currentUser.id}_${day}`) || {};
   const newData = getFoodData(day);
   // 只要有任何飲食內容就標記 hasData，讓營養師知道有更新
-  const hasAnyMeal = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k => newData[k]?.trim());
+  const hasAnyMeal = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k => newData[k]?.trim()) || ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k => (existing[k + '_imgs'] || []).length > 0);
   ss(`food_${currentUser.id}_${day}`, {
     ...existing,
     ...newData,
