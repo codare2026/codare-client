@@ -1965,7 +1965,7 @@ function getFoodData(day) {
   };
 }
 
-function saveFoodDay(day) {
+// 強制清除增量同步時間戳，確保下次進入頁面能撈到最新資料 localStorage.removeItem('cd_last_sync_' + currentUser.id);
   const existing = gs(`food_${currentUser.id}_${day}`) || {};
   const newData = getFoodData(day);
   // 只要有任何飲食內容就標記 hasData，讓營養師知道有更新
