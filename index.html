@@ -125,12 +125,12 @@ async function warmCache(userId) {
   if (lastSync) {
     // 增量：只抓上次同步後有變動的（例如營養師新增回覆）
     rows = await safeGet(
-      `${SB_URL}/rest/v1/cd?updated_at=gt.${encodeURIComponent(lastSync)}&key=ilike.%25${userId}%25&select=key,value&limit=200&order=updated_at`
+      `${SB_URL}/rest/v1/cd?updated_at=gt.${encodeURIComponent(lastSync)}&key=ilike.%25${encodeURIComponent(userId)}%25&select=key,value&limit=200&order=updated_at`
     );
   } else {
     // 第一次：抓此學員所有資料
     rows = await safeGet(
-      `${SB_URL}/rest/v1/cd?key=ilike.%25${userId}%25&select=key,value&limit=300`
+      `${SB_URL}/rest/v1/cd?key=ilike.%25${encodeURIComponent(userId)}%25&select=key,value&limit=300`
     );
   }
 
