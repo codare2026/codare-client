@@ -1968,27 +1968,27 @@ function getFoodData(day) {
 function saveFoodDay(day) {
   const existing = gs(`food_${currentUser.id}_${day}`) || {};
   const newData = getFoodData(day);
-  // 只要有任何飲食內容就標記 hasData，讓營養師知道有更新
-  const hasAnyMeal = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k => newData[k]?.trim()) || ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k => (existing[k + '_imgs'] || []).length > 0);
-  ss(`food_${currentUser.id}_${day}`, {
-    ...existing,
-    ...newData,
-    hasData: hasAnyMeal || existing.hasData || false,
-    lastUpdated: new Date().toISOString()
-  });
+  const merged = { ...existing, ...newData };
+  // 有文字或有照片都算 hasData
+  const hasAnyMeal = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k =>
+    newData[k]?.trim() || (merged[k + '_imgs'] || []).length > 0
+  );
+  merged.hasData = hasAnyMeal || existing.hasData || false;
+  merged.lastUpdated = new Date().toISOString();
+  ss(`food_${currentUser.id}_${day}`, merged);
   showToast('✅ 紀錄已儲存！');
+  return merged;
 }
 
 function notifyRD(day) {
-  saveFoodDay(day);
-  const existing = gs(`food_${currentUser.id}_${day}`) || {};
-  existing.notified = true;
-  existing.notifiedAt = new Date().toISOString();
-  ss(`food_${currentUser.id}_${day}`, existing);
+  const merged = saveFoodDay(day);
+  merged.notified = true;
+  merged.notifiedAt = new Date().toISOString();
+  merged.hasData = true;
+  ss(`food_${currentUser.id}_${day}`, merged);
   const btn = document.getElementById('notify-btn');
   if (btn) { btn.classList.add('sent'); btn.innerHTML = '✅ 已通知營養師'; }
   showToast('🎉 已通知營養師，等待回饋！');
-  // 推播通知給營養師
   const rdId = currentUser.rd || 'tingxuan';
   sendPushToRd(rdId, `📋 ${currentUser.name} 上傳飲食紀錄`, `${currentUser.name} 已上傳 ${day} 的飲食日記，請上線查看！`);
 }
