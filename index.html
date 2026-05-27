@@ -1792,14 +1792,6 @@ function renderFoodEntry(day) {
               <div style="background:#fff;border:1.5px solid var(--gray-200);border-radius:0 12px 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;color:var(--gray-700)">${msg.text}</div>
             </div>
           </div>`).join('')}
-        <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding-top:8px;border-top:1px dashed var(--gray-200)">
-          <textarea id="meal-reply-${m.key}" rows="1" placeholder="回覆…"
-            style="flex:1;padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:20px;font-size:13px;font-family:inherit;resize:none;outline:none;line-height:1.5"
-            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMealReply('${day}','${m.key}')}"></textarea>
-          <button onclick="sendMealReply('${day}','${m.key}')"
-            style="width:34px;height:34px;border-radius:50%;background:var(--primary);border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">▲</button>
-        </div>
       </div>` : '';
 
     return `<div class="meal-section">
@@ -1848,27 +1840,46 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
   );
   const stuReplies = Array.isArray(saved.studentReplies) ? saved.studentReplies : [];
   const stuReplySection = (hasOverall || hasMealFeedback) ? `
-    <div style="margin-top:4px">
-      <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px">💬 回應營養師</div>
-      ${stuReplies.map((r, i) => `
-        <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
-          <div style="width:30px;height:30px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${currentUser?.name?.charAt(0)||'我'}</div>
-          <div style="max-width:80%">
-            <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px">${currentUser?.name||'我'}
-              <span style="margin-left:4px">${new Date(r.at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
-            </div>
-            <div style="background:#fff;border:1.5px solid var(--primary-light);border-radius:0 12px 12px 12px;padding:10px 13px;font-size:13px;line-height:1.7;color:var(--gray-700);position:relative">
-              ${r.text}
-              <button onclick="deleteStudentReply('${day}',${i})" style="position:absolute;top:4px;right:6px;background:none;border:none;color:var(--gray-300);font-size:14px;cursor:pointer;padding:0;line-height:1">×</button>
-            </div>
-          </div>
-        </div>`).join('')}
-      <div style="display:flex;gap:8px;align-items:flex-end">
-        <textarea id="student-reply-input" placeholder="對營養師的回饋有想法嗎？可以在這裡留言…"
-          style="flex:1;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:10px;font-size:14px;font-family:inherit;resize:none;outline:none;min-height:68px;transition:border-color 0.2s"
-          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></textarea>
-        <button onclick="sendStudentReply('${day}')"
-          style="padding:10px 16px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 8px rgba(59,141,224,0.3)">送出</button>
+    <div style="margin-top:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:10px">📝 整日回饋</div>
+      <div style="background:var(--gray-50);border-radius:12px;padding:14px">
+        ${(() => {
+          const rdMsgs = (Array.isArray(saved.rdFeedbacks) ? saved.rdFeedbacks
+            : (saved.rdFeedback ? [{ text: saved.rdFeedback, at: saved.rdFeedbackAt }] : []))
+            .map(fb => ({ ...fb, role: 'rd' }));
+          const stuMsgs = (Array.isArray(saved.studentReplies) ? saved.studentReplies : [])
+            .filter(r => !r.text?.match(/^【(早餐|上午點心|午餐|下午點心|晚餐|宵夜)】/))
+            .map(r => ({ ...r, role: 'stu' }));
+          const all = [...rdMsgs, ...stuMsgs].sort((a,b) => new Date(a.at||0) - new Date(b.at||0));
+          if (!all.length) return '<div style="color:var(--gray-400);font-size:13px;text-align:center;padding:8px 0">尚無整日回饋</div>';
+          return all.map(msg => msg.role === 'rd' ? \`
+            <div style="display:flex;align-items:flex-start;gap:8px;justify-content:flex-end;margin-bottom:8px">
+              <div style="max-width:80%">
+                <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px;text-align:right">營養師
+                  <span style="margin-left:4px">\${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+                </div>
+                <div style="background:var(--teal,#2db8b0);color:#fff;border-radius:12px 0 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;white-space:pre-wrap">\${msg.text}</div>
+              </div>
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--teal,#2db8b0);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">師</div>
+            </div>\` : \`
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">\${currentUser?.name?.charAt(0)||'我'}</div>
+              <div style="max-width:80%">
+                <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px">\${currentUser?.name||'我'}
+                  <span style="margin-left:4px">\${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+                </div>
+                <div style="background:#fff;border:1.5px solid var(--gray-200);border-radius:0 12px 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;color:var(--gray-700)">\${msg.text}</div>
+              </div>
+            </div>\`).join('');
+        })()}
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px;padding-top:10px;border-top:1px dashed var(--gray-200)">
+          <textarea id="student-reply-input" placeholder="回應營養師…"
+            style="flex:1;padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:20px;font-size:13px;font-family:inherit;resize:none;outline:none;min-height:40px"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendStudentReply('${day}')}"></textarea>
+          <button onclick="sendStudentReply('${day}')"
+            style="width:34px;height:34px;border-radius:50%;background:var(--primary);border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">▲</button>
+        </div>
       </div>
     </div>` : '';
 
