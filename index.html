@@ -1806,7 +1806,15 @@ function renderFoodEntry(day) {
       </div>
       <textarea class="meal-textarea" id="meal-${m.key}" placeholder="例：堅果一小把、水果一份...">${saved[m.key] || ''}</textarea>
       ${mealFbHTML}
-      
+      ${mealFbArr.length > 0 ? `
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px">
+        <textarea id="meal-reply-${m.key}" placeholder="回覆${m.label}…"
+          style="flex:1;padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:20px;font-size:13px;font-family:inherit;resize:none;outline:none;min-height:40px"
+          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMealReply('${day}','${m.key}')}"></textarea>
+        <button onclick="sendMealReply('${day}','${m.key}')"
+          style="width:34px;height:34px;border-radius:50%;background:var(--primary);border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">▲</button>
+      </div>` : ''}
     </div>`;
   }).join('');
 
