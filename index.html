@@ -1765,18 +1765,41 @@ function renderFoodEntry(day) {
     const mealFbArr = Array.isArray(saved[m.key + '_rdFeedbacks'])
       ? saved[m.key + '_rdFeedbacks']
       : (saved[m.key + '_rdFeedback'] ? [{ text: saved[m.key + '_rdFeedback'] }] : []);
-    const mealFbHTML = mealFbArr.length ? `
+    const mealLabelMap = { breakfast:'早餐', snack1:'上午點心', lunch:'午餐', snack2:'下午點心', dinner:'晚餐', latenight:'宵夜' };
+    const mealStuReplies = (Array.isArray(saved.studentReplies) ? saved.studentReplies : [])
+      .filter(r => r.text?.startsWith(`【${mealLabelMap[m.key]}】`))
+      .map(r => ({ ...r, text: r.text.replace(/^【.*?】/, ''), role: 'stu' }));
+    const mealChat = [...mealFbArr.map(fb => ({ ...fb, role: 'rd' })), ...mealStuReplies]
+      .sort((a, b) => new Date(a.at||0) - new Date(b.at||0));
+    const mealFbHTML = mealChat.length ? `
       <div style="margin-top:10px">
-        ${mealFbArr.map(fb => `
-        <div style="display:flex;align-items:flex-start;gap:8px;justify-content:flex-end;margin-bottom:8px">
-          <div style="max-width:80%">
-            <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px;text-align:right">營養師
-              <span style="margin-left:4px">${fb.at ? new Date(fb.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+        ${mealChat.map(msg => msg.role === 'rd' ? `
+          <div style="display:flex;align-items:flex-start;gap:8px;justify-content:flex-end;margin-bottom:8px">
+            <div style="max-width:80%">
+              <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px;text-align:right">營養師
+                <span style="margin-left:4px">${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+              </div>
+              <div style="background:var(--teal,#2db8b0);color:#fff;border-radius:12px 0 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;white-space:pre-wrap">${msg.text}</div>
             </div>
-            <div style="background:var(--teal,#0d9488);color:#fff;border-radius:12px 0 12px 12px;padding:10px 13px;font-size:13px;line-height:1.7;white-space:pre-wrap;text-align:left">${fb.text}</div>
-          </div>
-          <div style="width:30px;height:30px;border-radius:50%;background:var(--teal,#0d9488);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">師</div>
-        </div>`).join('')}
+            <div style="width:30px;height:30px;border-radius:50%;background:var(--teal,#2db8b0);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">師</div>
+          </div>` : `
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+            <div style="width:30px;height:30px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${currentUser?.name?.charAt(0)||'我'}</div>
+            <div style="max-width:80%">
+              <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px">${currentUser?.name||'我'}
+                <span style="margin-left:4px">${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+              </div>
+              <div style="background:#fff;border:1.5px solid var(--gray-200);border-radius:0 12px 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;color:var(--gray-700)">${msg.text}</div>
+            </div>
+          </div>`).join('')}
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;padding-top:8px;border-top:1px dashed var(--gray-200)">
+          <textarea id="meal-reply-${m.key}" rows="1" placeholder="回覆…"
+            style="flex:1;padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:20px;font-size:13px;font-family:inherit;resize:none;outline:none;line-height:1.5"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMealReply('${day}','${m.key}')}"></textarea>
+          <button onclick="sendMealReply('${day}','${m.key}')"
+            style="width:34px;height:34px;border-radius:50%;background:var(--primary);border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">▲</button>
+        </div>
       </div>` : '';
 
     return `<div class="meal-section">
