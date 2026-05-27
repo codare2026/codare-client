@@ -1844,25 +1844,25 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
             .map(r => ({ ...r, role: 'stu' }));
           const all = [...rdMsgs, ...stuMsgs].sort((a,b) => new Date(a.at||0) - new Date(b.at||0));
           if (!all.length) return '<div style="color:var(--gray-400);font-size:13px;text-align:center;padding:8px 0">尚無整日回饋</div>';
-          return all.map(msg => msg.role === 'rd' ? \`
+          return all.map(msg => msg.role === 'rd' ? `
             <div style="display:flex;align-items:flex-start;gap:8px;justify-content:flex-end;margin-bottom:8px">
               <div style="max-width:80%">
                 <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px;text-align:right">營養師
-                  <span style="margin-left:4px">\${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+                  <span style="margin-left:4px">${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
                 </div>
-                <div style="background:var(--teal,#2db8b0);color:#fff;border-radius:12px 0 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;white-space:pre-wrap">\${msg.text}</div>
+                <div style="background:var(--teal,#2db8b0);color:#fff;border-radius:12px 0 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;white-space:pre-wrap">${msg.text}</div>
               </div>
               <div style="width:30px;height:30px;border-radius:50%;background:var(--teal,#2db8b0);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">師</div>
-            </div>\` : \`
+            </div>` : `
             <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
-              <div style="width:30px;height:30px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">\${currentUser?.name?.charAt(0)||'我'}</div>
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${currentUser?.name?.charAt(0)||'我'}</div>
               <div style="max-width:80%">
-                <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px">\${currentUser?.name||'我'}
-                  <span style="margin-left:4px">\${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+                <div style="font-size:11px;color:var(--gray-400);margin-bottom:3px">${currentUser?.name||'我'}
+                  <span style="margin-left:4px">${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
                 </div>
-                <div style="background:#fff;border:1.5px solid var(--gray-200);border-radius:0 12px 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;color:var(--gray-700)">\${msg.text}</div>
+                <div style="background:#fff;border:1.5px solid var(--gray-200);border-radius:0 12px 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;color:var(--gray-700)">${msg.text}</div>
               </div>
-            </div>\`).join('');
+            </div>`).join('');
         })()}
         <div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px;padding-top:10px;border-top:1px dashed var(--gray-200)">
           <textarea id="student-reply-input" placeholder="回應營養師…"
@@ -1917,8 +1917,6 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
   <button class="notify-btn ${notified ? 'sent' : ''}" id="notify-btn" onclick="notifyRD('${day}')" style="margin-top:10px">
     ${notified ? '✅ 已通知營養師' : '🍎 完成紀錄後按我通知營養師～'}
   </button>
-
-  
   ${stuReplySection}`;
 }
 
