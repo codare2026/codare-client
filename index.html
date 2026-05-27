@@ -1791,6 +1791,15 @@ function renderFoodEntry(day) {
       </div>
       <textarea class="meal-textarea" id="meal-${m.key}" placeholder="例：堅果一小把、水果一份...">${saved[m.key] || ''}</textarea>
       ${mealFbHTML}
+      ${mealFbArr.length > 0 ? `
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px">
+        <textarea id="meal-reply-${m.key}" rows="1" placeholder="回應營養師…"
+          style="flex:1;padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:20px;font-size:13px;font-family:inherit;resize:none;outline:none;line-height:1.5"
+          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMealReply('${day}','${m.key}')}"></textarea>
+        <button onclick="sendMealReply('${day}','${m.key}')"
+          style="width:34px;height:34px;border-radius:50%;background:var(--primary);border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">▲</button>
+      </div>` : ''}
     </div>`;
   }).join('');
 
@@ -1934,7 +1943,23 @@ function sendStudentReply(day) {
   // 重新渲染
   document.getElementById('main-content').innerHTML = renderFoodEntry(day);
 }
-
+function sendMealReply(day, mealKey) {
+  const ta = document.getElementById(`meal-reply-${mealKey}`);
+  const text = ta?.value?.trim();
+  if (!text) { showToast('請輸入回覆內容'); return; }
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
+  const replies = Array.isArray(existing.studentReplies) ? existing.studentReplies : [];
+  const mealLabel = { breakfast:'早餐', snack1:'上午點心', lunch:'午餐', snack2:'下午點心', dinner:'晚餐', latenight:'宵夜' };
+  replies.push({ text: `【${mealLabel[mealKey]||mealKey}】${text}`, at: new Date().toISOString() });
+  existing.studentReplies = replies;
+  ss(key, existing);
+  ta.value = '';
+  showToast('✅ 已送出回覆！');
+  const rdId = currentUser.rd || 'tingxuan';
+  sendPushToRd(rdId, `💬 ${currentUser.name} 回覆了你的留言`, `${currentUser.name} 針對你的回饋留言囉，快去看看！`);
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+}
 function deleteStudentReply(day, idx) {
   const key = `food_${currentUser.id}_${day}`;
   const existing = gs(key) || {};
