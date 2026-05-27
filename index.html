@@ -1806,15 +1806,7 @@ function renderFoodEntry(day) {
       </div>
       <textarea class="meal-textarea" id="meal-${m.key}" placeholder="例：堅果一小把、水果一份...">${saved[m.key] || ''}</textarea>
       ${mealFbHTML}
-      ${mealFbArr.length > 0 ? `
-      <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px">
-        <textarea id="meal-reply-${m.key}" rows="1" placeholder="回應營養師…"
-          style="flex:1;padding:8px 14px;border:1.5px solid var(--gray-200);border-radius:20px;font-size:13px;font-family:inherit;resize:none;outline:none;line-height:1.5"
-          onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMealReply('${day}','${m.key}')}"></textarea>
-        <button onclick="sendMealReply('${day}','${m.key}')"
-          style="width:34px;height:34px;border-radius:50%;background:var(--primary);border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">▲</button>
-      </div>` : ''}
+      
     </div>`;
   }).join('');
 
@@ -1926,19 +1918,7 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
     ${notified ? '✅ 已通知營養師' : '🍎 完成紀錄後按我通知營養師～'}
   </button>
 
-  <div class="rd-box" style="${!hasOverall ? 'background:var(--gray-50);border-left-color:var(--gray-300)' : ''}">
-    <div class="rd-box-title" style="${!hasOverall ? 'color:var(--gray-500)' : ''}">🥦 整日回饋</div>
-    ${overallHTML}
-    ${notified && !hasOverall ? (() => {
-      const [mo, d2] = day.split('/').map(Number);
-      const dt = new Date(new Date().getFullYear(), mo-1, d2);
-      const dow = dt.getDay();
-      const msg = (dow >= 1 && dow <= 4)
-        ? '⏳ 已通知，營養師將在隔日 22:00 前回覆'
-        : '⏳ 已通知，營養師將統一在週一 22:00 前回覆';
-      return `<div style="font-size:12px;color:var(--gray-400);margin-top:6px">${msg}</div>`;
-    })() : ''}
-  </div>
+  
   ${stuReplySection}`;
 }
 
