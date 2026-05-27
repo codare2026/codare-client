@@ -1805,6 +1805,12 @@ function renderFoodEntry(day) {
                 <span style="margin-left:4px">${msg.at ? new Date(msg.at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
               </div>
               <div style="background:#fff;border:1.5px solid var(--gray-200);border-radius:0 12px 12px 12px;padding:10px 13px;font-size:14px;line-height:1.7;color:var(--gray-700)">${msg.text}</div>
+<div style="display:flex;gap:6px;margin-top:4px">
+  <button onclick="editStudentReply('${day}',${all.indexOf(msg)},'${msg.text.replace(/'/g,'&#39;')}')"
+    style="background:none;border:1px solid var(--gray-300);color:var(--gray-500);border-radius:4px;cursor:pointer;font-size:11px;padding:1px 8px;font-family:inherit">✏️ 編輯</button>
+  <button onclick="deleteStudentReply('${day}',${stuMsgs.indexOf(msg)})"
+    style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:11px;padding:1px 8px;font-family:inherit">🗑️ 刪除</button>
+</div>
             </div>
           </div>`).join('')}
       </div>` : '';
@@ -1995,6 +2001,65 @@ function sendMealReply(day, mealKey) {
   sendPushToRd(rdId, `💬 ${currentUser.name} 回覆了你的留言`, `${currentUser.name} 針對你的回饋留言囉，快去看看！`);
   document.getElementById('main-content').innerHTML = renderFoodEntry(day);
 }
+function editStudentReply(day, allIdx, oldText) {
+  const newText = window.prompt('編輯回覆', oldText);
+  if (!newText || !newText.trim()) return;
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
+  const replies = Array.isArray(existing.studentReplies) ? existing.studentReplies : [];
+  // 找到對應的那筆（排除有餐次前綴的，找第 allIdx 筆整日回覆）
+  const overallReplies = replies.filter(r => !r.text?.match(/^【(早餐|上午點心|午餐|下午點心|晚餐|宵夜)】/));
+  const target = overallReplies[allIdx];
+  if (!target) return;
+  const realIdx = replies.indexOf(target);
+  if (realIdx >= 0) {
+    replies[realIdx].text = newText.trim();
+    replies[realIdx].editedAt = new Date().toISOString();
+  }
+  existing.studentReplies = replies;
+  ss(key, existing);
+  showToast('✅ 已更新！');
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+}
+
+
+function editMealStudentReply(day, mealKey, idx, oldText) {
+  const newText = window.prompt('編輯回覆', oldText);
+  if (!newText || !newText.trim()) return;
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
+  const replies = Array.isArray(existing.studentReplies) ? existing.studentReplies : [];
+  const mealLabel = { breakfast:'早餐', snack1:'上午點心', lunch:'午餐', snack2:'下午點心', dinner:'晚餐', latenight:'宵夜' };
+  const mealReplies = replies.filter(r => r.text?.startsWith(`【${mealLabel[mealKey]}】`));
+  const target = mealReplies[idx];
+  if (!target) return;
+  const realIdx = replies.indexOf(target);
+  if (realIdx >= 0) {
+    replies[realIdx].text = `【${mealLabel[mealKey]}】${newText.trim()}`;
+    replies[realIdx].editedAt = new Date().toISOString();
+  }
+  existing.studentReplies = replies;
+  ss(key, existing);
+  showToast('✅ 已更新！');
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+}
+
+function deleteMealStudentReply(day, mealKey, idx) {
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
+  const replies = Array.isArray(existing.studentReplies) ? existing.studentReplies : [];
+  const mealLabel = { breakfast:'早餐', snack1:'上午點心', lunch:'午餐', snack2:'下午點心', dinner:'晚餐', latenight:'宵夜' };
+  const mealReplies = replies.filter(r => r.text?.startsWith(`【${mealLabel[mealKey]}】`));
+  const target = mealReplies[idx];
+  if (!target) return;
+  const realIdx = replies.indexOf(target);
+  if (realIdx >= 0) replies.splice(realIdx, 1);
+  existing.studentReplies = replies;
+  ss(key, existing);
+  showToast('🗑️ 已刪除');
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+}
+
 function deleteStudentReply(day, idx) {
   const key = `food_${currentUser.id}_${day}`;
   const existing = gs(key) || {};
