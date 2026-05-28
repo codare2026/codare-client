@@ -1770,6 +1770,18 @@ function renderFoodEntry(day) {
     { key: 'latenight', label: '宵夜' }
   ];
 
+  const wGroups = buildWeekGroups(COURSE_DATES);
+  const wi = wGroups.findIndex(wg => wg.dates.includes(day));
+  const curWeek = wi >= 0 ? wi + 1 : 1;
+  const plan = gs(`wplan_${currentUser.id}_${curWeek}`) || {};
+  const mealPlanMap = {
+    breakfast: plan.breakfast || '',
+    snack1: '',
+    lunch: plan.lunch || '',
+    snack2: '',
+    dinner: plan.dinner || '',
+    latenight: ''
+  };
   const mealHTML = meals.map(m => {
     const imgs = (saved[m.key + '_imgs'] || []);
     const thumbs = imgs.map((src, i) => `
@@ -1816,7 +1828,7 @@ function renderFoodEntry(day) {
       </div>` : '';
 
     return `<div class="meal-section">
-      <div class="meal-title">${m.label}</div>
+      <div class="meal-title">${m.label}${mealPlanMap[m.key] ? `<span style="font-size:11px;font-weight:400;color:var(--primary);margin-left:8px">${mealPlanMap[m.key]}</span>` : ''}</div>
       <div class="img-upload-area">
         <div class="img-upload-row" id="upload-btns-${m.key}">
           <label class="img-upload-btn"><span>📷 拍照</span><input type="file" accept="image/*" capture="environment" class="img-upload-input" onchange="handleImgUpload(event,'${day}','${m.key}',true)"></label>
@@ -1913,6 +1925,7 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
   return `
   <button class="back-btn" onclick="backToList()">‹ 返回飲食紀錄</button>
   <div class="page-title">${day} 飲食日記</div>
+  ${plan.calories ? `<div style="background:var(--primary-light);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--primary-dark);font-weight:600">🍽️ 今日熱量目標：${plan.calories}${plan.total ? '　份數：' + plan.total : ''}</div>` : ''}
   <div style="color:#ef4444;font-weight:700;font-size:13px;margin-bottom:14px;line-height:1.6">⚠️ 記得紀錄完滑到最下方點「儲存紀錄」後，需要再點「通知營養師」，營養師才能進行回饋唷～</div>
   ${mealHTML}
   <div class="card">
