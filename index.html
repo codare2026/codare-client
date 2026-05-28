@@ -1778,7 +1778,7 @@ function renderFoodEntry(day) {
     breakfast: plan.breakfast || '',
     snack1: '',
     lunch: plan.lunch || '',
-    snack2: '',
+    snack2: plan.snack || '',
     dinner: plan.dinner || '',
     latenight: ''
   };
@@ -2563,9 +2563,9 @@ function goToFeedbackDay(day) {
   if (f) { f.fbRead = true; ss(`food_${currentUser.id}_${day}`, f); }
   currentFoodDay = day;
   // Find which week contains this day
-  const wGroups = buildWeekGroups(COURSE_DATES);
+  const wGroups = buildWeekGroups(buildCourseDates(currentUser.start, currentUser.end));
   const wi = wGroups.findIndex(wg => wg.dates.includes(day));
-  if (wi >= 0) currentFoodWeek = wi + 1;
+  const curWeek = wi >= 0 ? wi + 1 : 1;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('nav-food')?.classList.add('active');
   document.getElementById('main-content').innerHTML = renderFoodEntry(day);
