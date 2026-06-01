@@ -2290,7 +2290,8 @@ function renderBody() {
             color:${hasEx ? '#fff' : 'var(--gray-300)'}">
             ${hasEx ? '🏃' : '—'}
           </div>
-          ${hasEx ? `<div style="font-size:10px;color:var(--primary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40px">${f.exType}</div>` : ''}
+          ${hasEx ? `<div style="font-size:10px;color:var(--primary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40px">${f.exType}</div>
+          <div style="font-size:10px;color:var(--gray-400);margin-top:1px">${f.exMin ? f.exMin+'分' : ''}</div>` : ''}
         </div>`;
       }).join('');
       const exCount = wg.dates.filter(d => {
