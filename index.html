@@ -2271,8 +2271,8 @@ function renderBody() {
       '<div class="card-title">📊 週計畫與目標</div>' +
       '<div style="font-size:13px;color:var(--gray-500);padding:6px 0 8px">詳細週計畫、份數分配、小目標打勾請至「目標」分頁查看</div>' +
       '<button data-pg="goals" onclick="showPage(this.dataset.pg)" style="width:100%;padding:12px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;color:var(--primary-dark);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">🧍 前往本週計畫與目標 →</button>' +
-    '</div>';
-  + (() => {
+    '</div>' +
+  (() => {
     const wGroups = buildWeekGroups(COURSE_DATES);
     return wGroups.map((wg, wi) => {
       const weekDays = wg.dates.map(d => {
