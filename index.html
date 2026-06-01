@@ -2272,6 +2272,40 @@ function renderBody() {
       '<div style="font-size:13px;color:var(--gray-500);padding:6px 0 8px">詳細週計畫、份數分配、小目標打勾請至「目標」分頁查看</div>' +
       '<button data-pg="goals" onclick="showPage(this.dataset.pg)" style="width:100%;padding:12px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;color:var(--primary-dark);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">🧍 前往本週計畫與目標 →</button>' +
     '</div>';
+  + (() => {
+    const wGroups = buildWeekGroups(COURSE_DATES);
+    return wGroups.map((wg, wi) => {
+      const weekDays = wg.dates.map(d => {
+        const f = gs(`food_${currentUser.id}_${d}`);
+        const hasEx = f && f.exType && f.exType.trim();
+        const [m, day] = d.split('/');
+        const dt = new Date(new Date().getFullYear(), m-1, day);
+        const dayName = ['日','一','二','三','四','五','六'][dt.getDay()];
+        const isFuture = dt > new Date();
+        return `<div style="flex:1;text-align:center">
+          <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">週${dayName}</div>
+          <div style="font-size:11px;color:var(--gray-300);margin-bottom:4px">${d}</div>
+          <div style="width:32px;height:32px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:14px;
+            background:${hasEx ? 'linear-gradient(135deg,var(--primary),var(--primary-dark))' : isFuture ? 'var(--gray-100)' : 'var(--gray-100)'};
+            color:${hasEx ? '#fff' : 'var(--gray-300)'}">
+            ${hasEx ? '🏃' : '—'}
+          </div>
+          ${hasEx ? `<div style="font-size:10px;color:var(--primary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40px">${f.exType}</div>` : ''}
+        </div>`;
+      }).join('');
+      const exCount = wg.dates.filter(d => {
+        const f = gs(`food_${currentUser.id}_${d}`);
+        return f && f.exType && f.exType.trim();
+      }).length;
+      return `<div class="card" style="margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin:0">🏃 W${wi+1} 運動紀錄</div>
+          <span style="font-size:13px;font-weight:700;color:${exCount >= 3 ? 'var(--primary)' : 'var(--gray-400)'}">本週 ${exCount} 天</span>
+        </div>
+        <div style="display:flex;gap:4px">${weekDays}</div>
+      </div>`;
+    }).join('');
+  })()
 }
 
 function updateProg(el) {
