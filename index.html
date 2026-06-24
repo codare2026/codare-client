@@ -1747,7 +1747,6 @@ function renderFoodList() {
   const todayStr = `${today.getMonth()+1}/${today.getDate()}`;
   const wGroups = buildWeekGroups(COURSE_DATES);
 
-  // Dynamic week grouping — 7 days per week, last week may be shorter
   const weekDates = [];
   for (let w = 0; w * 7 < COURSE_DATES.length; w++) {
     weekDates.push(COURSE_DATES.slice(w * 7, (w + 1) * 7));
@@ -1756,7 +1755,25 @@ function renderFoodList() {
     `第${['一','二','三','四','五','六','七','八'][w] || (w+1)}週（${chunk[0]}–${chunk[chunk.length-1]}）`
   );
 
-  let html = '<div class="page-title">飲食紀錄</div>';
+  // ── 今天置頂卡片 ──
+  let todayHTML = '';
+  if (COURSE_DATES.includes(todayStr)) {
+    const saved = gs(`food_${currentUser.id}_${todayStr}`) || null;
+    let icon = '—';
+    if (saved && saved.notified) icon = '✅';
+    else if (saved && saved.hasData) icon = '📝';
+    todayHTML = `
+      <div style="font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;letter-spacing:0.5px">📍 今天</div>
+      <div class="day-item" onclick="openFoodDay('${todayStr}')" style="border:2px solid var(--primary);background:var(--primary-light);margin-bottom:18px">
+        <div style="font-size:18px;width:28px;text-align:center;flex-shrink:0">${icon}</div>
+        <div class="day-item-date" style="color:var(--primary-dark)">
+          ${todayStr} <span style="font-size:12px;font-weight:600;color:var(--primary)">(今天)</span>
+        </div>
+        <div class="day-item-arrow">›</div>
+      </div>`;
+  }
+
+  let html = '<div class="page-title">飲食紀錄</div>' + todayHTML;
   weekDates.forEach((wdates, wi) => {
     html += `<div class="week-header">${weekLabels[wi]}</div>`;
     wdates.forEach(d => {
@@ -1781,7 +1798,6 @@ function renderFoodList() {
 
 function openFoodDay(day) {
   currentFoodDay = day;
-  // 打開當天就標記已讀，紅點消失
   const key = `food_${currentUser.id}_${day}`;
   const existing = gs(key);
   if (existing) {
@@ -1789,6 +1805,26 @@ function openFoodDay(day) {
     ss(key, existing);
   }
   document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+  scrollToCurrentMeal();
+}
+
+// ── 依現在時間自動捲動到對應餐次 ──
+function scrollToCurrentMeal() {
+  const hour = new Date().getHours();
+  let mealKey;
+  if (hour < 9)       mealKey = 'breakfast';
+  else if (hour < 11) mealKey = 'snack1';
+  else if (hour < 14) mealKey = 'lunch';
+  else if (hour < 17) mealKey = 'snack2';
+  else if (hour < 20) mealKey = 'dinner';
+  else                mealKey = 'latenight';
+
+  setTimeout(() => {
+    const ta = document.getElementById(`meal-${mealKey}`);
+    if (ta) {
+      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 100);
 }
 
 function renderFoodEntry(day) {
