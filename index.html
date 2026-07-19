@@ -1897,12 +1897,21 @@ function renderFoodEntry(day) {
           </div>`).join('')}
       </div>` : '';
 
-    return `<div class="meal-section">
-      <div class="meal-title">${m.label}${mealPlanMap[m.key] ? `<span style="font-size:11px;font-weight:400;color:var(--primary);margin-left:8px">${mealPlanMap[m.key]}</span>` : ''}</div>
+    const mealAt = saved[m.key + '_at'];
+const mealAtDisplay = mealAt ? new Date(mealAt).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : '';
+
+return `<div class="meal-section">
+      <div class="meal-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <span>${m.label}${mealPlanMap[m.key] ? `<span style="font-size:11px;font-weight:400;color:var(--primary);margin-left:8px">${mealPlanMap[m.key]}</span>` : ''}</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${mealAt ? `<span style="font-size:11px;color:var(--gray-400);font-weight:400" id="meal-time-display-${m.key}">🕐 ${mealAtDisplay}</span>
+          <button type="button" onclick="editMealTime('${day}','${m.key}')" style="font-size:10px;color:var(--primary);background:none;border:1px solid var(--primary);border-radius:4px;padding:1px 6px;cursor:pointer;font-family:inherit">調整</button>` : ''}
+        </span>
+      </div>
       <div class="img-upload-area">
         <div class="img-upload-row" id="upload-btns-${m.key}">
-          <label class="img-upload-btn"><span>📷 拍照</span><input type="file" accept="image/*" capture="environment" class="img-upload-input" onchange="handleImgUpload(event,'${day}','${m.key}',true)"></label>
-          <label class="img-upload-btn"><span>🖼️ 從相簿選取</span><input type="file" accept="image/*" class="img-upload-input" onchange="handleImgUpload(event,'${day}','${m.key}',false)"></label>
+          <label class="img-upload-btn"><span>📷 拍照</span><input type="file" accept="image/*" capture="environment" class="img-upload-input" onchange="handleImgUpload(event,'${day}','${m.key}')"></label>
+          <label class="img-upload-btn"><span>🖼️ 從相簿選取</span><input type="file" accept="image/*" multiple class="img-upload-input" onchange="handleImgUpload(event,'${day}','${m.key}')"></label>
         </div>
         <div class="img-preview-row" id="preview-${m.key}">${thumbs}</div>
         ${imgs.length > 0 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:4px">${imgs.length} 張｜點照片右上角 ✕ 可刪除</div>` : ''}
@@ -2214,6 +2223,15 @@ function saveFoodDay(day) {
   const existing = gs(`food_${currentUser.id}_${day}`) || {};
   const newData = getFoodData(day);
   const merged = { ...existing, ...newData };
+  // 自動記錄有內容的餐次時間（只有原本沒有時間戳記的才自動填入，已有的不覆蓋）
+  const mealKeys = ['breakfast','snack1','lunch','snack2','dinner','latenight'];
+  const now = new Date().toISOString();
+  mealKeys.forEach(k => {
+    const hasContent = newData[k]?.trim() || (merged[k + '_imgs'] || []).length > 0;
+    if (hasContent && !merged[k + '_at']) {
+      merged[k + '_at'] = now;
+    }
+  });
   // 有文字或有照片都算 hasData
   const hasAnyMeal = ['breakfast','snack1','lunch','snack2','dinner','latenight'].some(k =>
     newData[k]?.trim() || (merged[k + '_imgs'] || []).length > 0
@@ -2234,6 +2252,30 @@ function saveFoodDay(day) {
   }
   showToast('✅ 紀錄已儲存！');
   return merged;
+}
+function editMealTime(day, mealKey) {
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
+  const currentAt = existing[mealKey + '_at'];
+  const currentTime = currentAt
+    ? new Date(currentAt).toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit', hour12:false})
+    : new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit', hour12:false});
+
+  const newTime = window.prompt(`調整${{ breakfast:'早餐', snack1:'上午點心', lunch:'午餐', snack2:'下午點心', dinner:'晚餐', latenight:'宵夜' }[mealKey]}時間（格式：HH:MM）`, currentTime);
+  if (!newTime || !newTime.trim()) return;
+
+  const [h, m] = newTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    showToast('⚠️ 時間格式不正確，請用 HH:MM 格式');
+    return;
+  }
+
+  const [mo, d] = day.split('/');
+  const newAt = new Date(new Date().getFullYear(), Number(mo)-1, Number(d), h, m);
+  existing[mealKey + '_at'] = newAt.toISOString();
+  ss(key, existing);
+  showToast('✅ 時間已更新！');
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
 }
 
 function notifyRD(day) {
