@@ -2044,10 +2044,17 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
     </div>
   </div>
 
-  <button class="save-btn" id="save-btn" onclick="saveFoodDay('${day}')" style="background:#fff;color:var(--primary);border:2px solid var(--primary);box-shadow:none">💾 儲存紀錄</button>
-  <button class="notify-btn ${notified ? 'sent' : ''}" id="notify-btn" onclick="notifyRD('${day}')" style="margin-top:10px">
-    ${notified ? '✅ 已通知營養師' : '🍎 完成紀錄後按我通知營養師～'}
-  </button>
+<div style="height:80px"></div>
+  <div style="position:fixed;bottom:60px;left:0;right:0;padding:8px 16px;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:99;display:flex;gap:8px;max-width:480px;margin:0 auto">
+    <button id="save-btn" onclick="saveFoodDay('${day}')"
+      style="flex:1;padding:11px 8px;background:#fff;color:var(--primary);border:2px solid var(--primary);border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all 0.15s">
+      💾 儲存紀錄
+    </button>
+    <button class="notify-btn ${notified ? 'sent' : ''}" id="notify-btn" onclick="notifyRD('${day}')"
+      style="flex:2;padding:11px 8px;border-radius:12px;font-size:13px;margin-top:0">
+      ${notified ? '✅ 已通知營養師' : '🍎 通知營養師'}
+    </button>
+  </div>
   ${stuReplySection}`;
 }
 
@@ -2251,6 +2258,8 @@ function saveFoodDay(day) {
     saveBtn.onclick = null;
   }
   showToast('✅ 紀錄已儲存！');
+  // 重新渲染讓時間顯示出來
+  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
   return merged;
 }
 function editMealTime(day, mealKey) {
