@@ -2075,7 +2075,7 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
     <div class="life-grid">
   <div class="life-field"><label>運動形式</label><input type="text" id="l-ex" value="${lifeDraft('exType')}" placeholder="例：慢跑、重訓" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_exType',this.value)"></div>
   <div class="life-field"><label>運動時間（分鐘）</label><input type="number" id="l-exmin" value="${lifeDraft('exMin')}" placeholder="30" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_exMin',this.value)"></div>
-  <div class="life-field"><label>運動時刻（幾點開始）</label><input type="time" id="l-extime" value="${saved.exTime||''}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s;-webkit-appearance:none;appearance:none" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></div>
+  <div class="life-field"><label>運動時刻（幾點開始）</label><input type="time" id="l-extime" value="${saved.exTime||''}" style="display:block;width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s;-webkit-appearance:none;appearance:none" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></div>
   <div class="life-field"><label>飲水量（ml）</label><input type="number" id="l-water" value="${lifeDraft('water')}" placeholder="1500" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_water',this.value)"></div>
   <div class="life-field"><label>睡眠時間（小時）</label><input type="number" id="l-sleep" value="${lifeDraft('sleep')}" placeholder="7" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_sleep',this.value)"></div>
   <div class="life-field"><label>排便次數</label><input type="number" id="l-poop" value="${lifeDraft('poop')}" placeholder="1" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_poop',this.value)"></div>
@@ -2325,13 +2325,14 @@ mealKeys.forEach(k => {
   ['exType','exMin','water','sleep','poop','steps','lifeNote','moodNote'].forEach(k => {
   localStorage.removeItem(`stu_draft_life_${currentUser.id}_${day}_${k}`);
 });
-  const saveBtn = document.getElementById('save-btn');
+const saveBtn = document.getElementById('save-btn');
   if (saveBtn) {
-    saveBtn.style.background = 'linear-gradient(135deg,var(--primary),var(--primary-dark))';
+    saveBtn.style.background = 'var(--primary)';
     saveBtn.style.color = '#fff';
-    saveBtn.style.border = 'none';
-    saveBtn.innerHTML = '✅ 已儲存紀錄';
-    saveBtn.onclick = null;
+    saveBtn.style.border = '2px solid var(--primary)';
+    saveBtn.style.opacity = '0.85';
+    saveBtn.innerHTML = '✅ 已儲存';
+    saveBtn.disabled = true;
   }
   showToast('✅ 紀錄已儲存！');
   // 重新渲染讓時間顯示出來
