@@ -1868,7 +1868,7 @@ function openFoodDay(day) {
       if (food.notified) {
         notifyBtn.classList.add('sent');
         notifyBtn.innerHTML = '✅ 已通知營養師';
-        notifyBtn.disabled = true;
+        notifyBtn.disabled = false;
       } else {
         notifyBtn.classList.remove('sent');
         notifyBtn.innerHTML = '🍎 完成紀錄後按我通知營養師～';
