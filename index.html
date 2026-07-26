@@ -2109,7 +2109,7 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
 
 ${lifeItems.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:12px">${lifeItems.map(x => `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:var(--gray-100);border-radius:20px;font-size:12px;color:var(--gray-600)">${x.icon} ${x.label}：${x.val}</span>`).join('')}</div>` : ''}
 <div style="height:80px"></div>
-  <div style="position:fixed;bottom:60px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;padding:8px 16px;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:99;display:flex;gap:8px">
+  <div style="position:fixed;bottom:70px;left:0;right:0;width:100%;padding:8px 16px;background:rgba(255,255,255,0.97);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:9999;display:flex;gap:8px;box-sizing:border-box">
     <button id="save-btn" onclick="saveFoodDay('${day}')"
       style="flex:1;padding:11px 8px;background:#fff;color:var(--primary);border:2px solid var(--primary);border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all 0.15s">
       💾 儲存紀錄
@@ -2327,12 +2327,22 @@ mealKeys.forEach(k => {
 });
 const saveBtn = document.getElementById('save-btn');
   if (saveBtn) {
-    saveBtn.style.background = 'var(--primary)';
+setTimeout(() => {
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+      saveBtn.style.background = 'linear-gradient(135deg,var(--primary),var(--primary-dark))';
+      saveBtn.style.color = '#fff';
+      saveBtn.style.border = '2px solid var(--primary)';
+      saveBtn.innerHTML = '✅ 已儲存';
+      saveBtn.disabled = true;
+      saveBtn.style.opacity = '1';
+    }
+  }, 50);
     saveBtn.style.color = '#fff';
     saveBtn.style.border = '2px solid var(--primary)';
-    saveBtn.style.opacity = '0.85';
     saveBtn.innerHTML = '✅ 已儲存';
     saveBtn.disabled = true;
+    saveBtn.style.opacity = '1';
   }
   showToast('✅ 紀錄已儲存！');
   // 重新渲染讓時間顯示出來
