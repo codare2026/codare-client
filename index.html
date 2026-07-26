@@ -55,19 +55,52 @@ function ss(key, val) {
   sbWrite(key, val);
 }
 
+const _pendingWrites = {};
+
 async function sbWrite(key, val) {
   try {
     if (val === null) {
       await fetch(`${SB_URL}/rest/v1/cd?key=eq.${encodeURIComponent(key)}`, { method: 'DELETE', headers: SB_HDRS });
     } else {
-      // 使用 upsert（merge-duplicates）確保跨裝置同步
-      await fetch(`${SB_URL}/rest/v1/cd`, {
+      const res = await fetch(`${SB_URL}/rest/v1/cd`, {
         method: 'POST',
         headers: { ...SB_HDRS, 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify({ key, value: val, updated_at: new Date().toISOString() })
       });
+      if (!res.ok) throw new Error('write failed');
     }
-  } catch(e) { console.warn('Supabase write error:', e.message); }
+    delete _pendingWrites[key];
+    try { localStorage.removeItem('cd_pending_' + key); } catch {}
+  } catch(e) {
+    console.warn('寫入失敗，加入待寫入隊列:', key);
+    _pendingWrites[key] = { val, at: new Date().toISOString() };
+    try { localStorage.setItem('cd_pending_' + key, JSON.stringify({ val, at: new Date().toISOString() })); } catch {}
+  }
+}
+
+async function flushPendingWrites() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('cd_pending_')) {
+        const key = k.slice('cd_pending_'.length);
+        if (!_pendingWrites[key]) {
+          try { _pendingWrites[key] = JSON.parse(localStorage.getItem(k)); } catch {}
+        }
+      }
+    }
+  } catch {}
+
+  const keys = Object.keys(_pendingWrites);
+  if (!keys.length) return;
+
+  showToast(`🔄 補寫 ${keys.length} 筆離線資料中…`);
+  for (const key of keys) {
+    const { val } = _pendingWrites[key];
+    await sbWrite(key, val);
+    await new Promise(r => setTimeout(r, 50));
+  }
+  showToast('✅ 離線資料已全部同步！');
 }
 
 // ── 上傳圖片到 Supabase Storage（取代 base64 存資料庫）──
@@ -134,8 +167,9 @@ async function warmCache(userId) {
     );
   }
 
-  rows.forEach(({ key, value }) => {
+rows.forEach(({ key, value }) => {
     if (!key) return;
+    if (_pendingWrites[key]) return;
     _cache[key] = value;
     try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
   });
@@ -1477,7 +1511,12 @@ if (currentFoodDay) {
     } catch(e) {}
   }, 15000);
 
-  showPage('home');
+  window.addEventListener('online', async () => {
+  showToast('🌐 網路已恢復，同步離線資料中…');
+  await flushPendingWrites();
+});
+setTimeout(flushPendingWrites, 2000);
+showPage('home');
   setTimeout(updateInboxBadge, 500);
 }
 
@@ -1900,12 +1939,19 @@ function renderFoodEntry(day) {
     const mealAt = saved[m.key + '_at'];
 const mealAtDisplay = mealAt ? new Date(mealAt).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : '';
 
+const mealAtTime = mealAt
+  ? new Date(mealAt).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})
+  : '';
+
 return `<div class="meal-section">
       <div class="meal-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
         <span>${m.label}${mealPlanMap[m.key] ? `<span style="font-size:11px;font-weight:400;color:var(--primary);margin-left:8px">${mealPlanMap[m.key]}</span>` : ''}</span>
         <span style="display:flex;align-items:center;gap:6px">
-          ${mealAt ? `<span style="font-size:11px;color:var(--gray-400);font-weight:400" id="meal-time-display-${m.key}">🕐 ${mealAtDisplay}</span>
-          <button type="button" onclick="editMealTime('${day}','${m.key}')" style="font-size:10px;color:var(--primary);background:none;border:1px solid var(--primary);border-radius:4px;padding:1px 6px;cursor:pointer;font-family:inherit">調整</button>` : ''}
+          <span style="font-size:11px;color:var(--gray-400)">🕐</span>
+          <input type="time" id="meal-time-${m.key}" value="${mealAtTime}"
+            style="font-size:11px;color:var(--gray-600);border:1px solid var(--gray-200);border-radius:6px;padding:2px 6px;font-family:inherit;background:#fff;outline:none;-webkit-appearance:none;appearance:none"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"
+            onchange="saveMealTime('${day}','${m.key}',this.value)">
         </span>
       </div>
       <div class="img-upload-area">
@@ -1931,7 +1977,14 @@ return `<div class="meal-section">
       </div>` : ''}
     </div>`;
   }).join('');
-
+  
+const lifeItems = [
+    { icon: '🏃', label: '運動', val: saved.exType ? `${saved.exType}${saved.exMin ? ' ' + saved.exMin + '分鐘' : ''}${saved.exTime ? '　' + saved.exTime + ' 開始' : ''}` : null },
+    { icon: '👟', label: '步數', val: saved.steps ? saved.steps + ' 步' : null },
+    { icon: '💧', label: '飲水', val: saved.water ? saved.water + 'ml' : null },
+    { icon: '😴', label: '睡眠', val: saved.sleep ? saved.sleep + '小時' : null },
+    { icon: '🚽', label: '排便', val: saved.poop ? saved.poop + '次' : null }
+  ].filter(x => x.val);
   const notified = saved.notified;
   const overallArr = Array.isArray(saved.rdFeedbacks)
     ? saved.rdFeedbacks
@@ -2040,11 +2093,16 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
       <input type="text" id="l-mood-note" value="${saved.moodNote || ''}" placeholder="心情描述（可選）…" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'">
     </div>
     <div class="life-field full" style="margin-top:8px">
+  <label>今日步數 👟</label>
+  <input type="number" id="l-steps" value="${saved.steps||''}" placeholder="例：8000" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'">
+</div>
+    <div class="life-field full" style="margin-top:8px">
       <label>飲食札記（今天的感受、心情、或困惑都可以寫）</label>
       <textarea id="l-note" placeholder="今天吃了什麼讓你開心或困擾？都歡迎告訴我們！" style="min-height:80px">${saved.lifeNote || ''}</textarea>
     </div>
   </div>
 
+${lifeItems.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:12px">${lifeItems.map(x => `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:var(--gray-100);border-radius:20px;font-size:12px;color:var(--gray-600)">${x.icon} ${x.label}：${x.val}</span>`).join('')}</div>` : ''}
 <div style="height:80px"></div>
   <div style="position:fixed;bottom:60px;left:0;right:0;padding:8px 16px;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:99;display:flex;gap:8px;max-width:480px;margin:0 auto">
     <button id="save-btn" onclick="saveFoodDay('${day}')"
@@ -2219,6 +2277,7 @@ function getFoodData(day) {
     exType: document.getElementById('l-ex')?.value || '',
     exMin: document.getElementById('l-exmin')?.value || '',
     exTime: document.getElementById('l-extime')?.value || '',
+    steps: document.getElementById('l-steps')?.value || '',
     water: document.getElementById('l-water')?.value || '',
     sleep: document.getElementById('l-sleep')?.value || '',
     poop: document.getElementById('l-poop')?.value || '',
@@ -2235,10 +2294,17 @@ function saveFoodDay(day) {
   // 自動記錄有內容的餐次時間（只有原本沒有時間戳記的才自動填入，已有的不覆蓋）
   const mealKeys = ['breakfast','snack1','lunch','snack2','dinner','latenight'];
   const now = new Date().toISOString();
-  mealKeys.forEach(k => {
+mealKeys.forEach(k => {
     const hasContent = newData[k]?.trim() || (merged[k + '_imgs'] || []).length > 0;
-    if (hasContent && !merged[k + '_at']) {
-      merged[k + '_at'] = now;
+    if (hasContent) {
+      const timeInput = document.getElementById(`meal-time-${k}`);
+      if (timeInput && timeInput.value) {
+        const [h, m] = timeInput.value.split(':').map(Number);
+        const [mo, d] = day.split('/');
+        merged[k + '_at'] = new Date(new Date().getFullYear(), Number(mo)-1, Number(d), h, m).toISOString();
+      } else if (!merged[k + '_at']) {
+        merged[k + '_at'] = now;
+      }
     }
   });
   // 有文字或有照片都算 hasData
@@ -2264,29 +2330,16 @@ function saveFoodDay(day) {
   document.getElementById('main-content').innerHTML = renderFoodEntry(day);
   return merged;
 }
-function editMealTime(day, mealKey) {
-  const key = `food_${currentUser.id}_${day}`;
-  const existing = gs(key) || {};
-  const currentAt = existing[mealKey + '_at'];
-  const currentTime = currentAt
-    ? new Date(currentAt).toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit', hour12:false})
-    : new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit', hour12:false});
-
-  const newTime = window.prompt(`調整${{ breakfast:'早餐', snack1:'上午點心', lunch:'午餐', snack2:'下午點心', dinner:'晚餐', latenight:'宵夜' }[mealKey]}時間（格式：HH:MM）`, currentTime);
-  if (!newTime || !newTime.trim()) return;
-
-  const [h, m] = newTime.split(':').map(Number);
-  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
-    showToast('⚠️ 時間格式不正確，請用 HH:MM 格式');
-    return;
-  }
-
+function saveMealTime(day, mealKey, timeValue) {
+  if (!timeValue) return;
+  const [h, m] = timeValue.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return;
   const [mo, d] = day.split('/');
   const newAt = new Date(new Date().getFullYear(), Number(mo)-1, Number(d), h, m);
+  const key = `food_${currentUser.id}_${day}`;
+  const existing = gs(key) || {};
   existing[mealKey + '_at'] = newAt.toISOString();
   ss(key, existing);
-  showToast('✅ 時間已更新！');
-  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
 }
 
 function notifyRD(day) {
@@ -3126,6 +3179,8 @@ function handleImgUpload(event, day, mealKey) {
   const urls = [];
 
   files.forEach(file => {
+    const capturedMealKey = mealKey;
+    const capturedDay = day;
     const img = new Image();
     const blobUrl = URL.createObjectURL(file);
     img.onload = () => {
@@ -3139,18 +3194,18 @@ function handleImgUpload(event, day, mealKey) {
       URL.revokeObjectURL(blobUrl);
       canvas.toBlob(async (blob) => {
         try {
-          const url = await uploadPhoto(blob, currentUser.id, day, mealKey);
+          const url = await uploadPhoto(blob, currentUser.id, capturedDay, capturedMealKey);
           urls.push(url);
         } catch(e) {
           showToast('⚠️ 照片上傳失敗，請確認網路後重試');
         }
         done++;
-        if (done === files.length) appendImgs(day, mealKey, urls);
+        if (done === files.length) appendImgs(capturedDay, capturedMealKey, urls);
       }, 'image/jpeg', 0.75);
     };
     img.onerror = () => {
       const reader = new FileReader();
-      reader.onload = e => { urls.push(e.target.result); done++; if (done === files.length) appendImgs(day, mealKey, urls); };
+      reader.onload = e => { urls.push(e.target.result); done++; if (done === files.length) appendImgs(capturedDay, capturedMealKey, urls); };
       reader.readAsDataURL(file);
     };
     img.src = blobUrl;
