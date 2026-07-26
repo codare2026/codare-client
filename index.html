@@ -2108,9 +2108,9 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
   </div>
 
 ${lifeItems.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:12px">${lifeItems.map(x => `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:var(--gray-100);border-radius:20px;font-size:12px;color:var(--gray-600)">${x.icon} ${x.label}：${x.val}</span>`).join('')}</div>` : ''}
-<div style="height:80px"></div>
-  <div style="position:fixed;bottom:70px;left:0;right:0;width:100%;padding:8px 16px;background:rgba(255,255,255,0.97);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:9999;display:flex;gap:8px;box-sizing:border-box">
-    <button id="save-btn" onclick="saveFoodDay('${day}')"
+<div style="height:120px"></div>
+<div style="position:fixed;bottom:0;left:0;right:0;width:100%;padding:12px 16px 24px;background:rgba(255,255,255,0.97);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:9999;display:flex;gap:8px;box-sizing:border-box">
+<button id="save-btn" onclick="saveFoodDay('${day}')"
       style="flex:1;padding:11px 8px;background:#fff;color:var(--primary);border:2px solid var(--primary);border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all 0.15s">
       💾 儲存紀錄
     </button>
