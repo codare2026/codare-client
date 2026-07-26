@@ -2358,31 +2358,51 @@ mealKeys.forEach(k => {
 });
   showToast('✅ 紀錄已儲存！');
   setTimeout(() => {
+    // 儲存按鈕變色（每次按都重設，才能再按）
     const saveBtn = document.getElementById('save-btn-fixed');
     if (saveBtn) {
       saveBtn.style.background = 'linear-gradient(135deg,var(--primary),var(--primary-dark))';
       saveBtn.style.color = '#fff';
       saveBtn.style.border = '2px solid var(--primary)';
       saveBtn.innerHTML = '✅ 已儲存';
-      saveBtn.disabled = true;
+      saveBtn.disabled = false; // 不鎖住，讓學員可以繼續填再按
       saveBtn.style.opacity = '1';
+      // 3秒後恢復原本樣式，讓學員知道可以繼續儲存
+      setTimeout(() => {
+        if (saveBtn) {
+          saveBtn.style.background = '#fff';
+          saveBtn.style.color = 'var(--primary)';
+          saveBtn.style.border = '2px solid var(--primary)';
+          saveBtn.innerHTML = '💾 儲存紀錄';
+        }
+      }, 3000);
     }
+    // 各餐次已儲存標記：只要 merged 裡有資料就顯示
     ['breakfast','snack1','lunch','snack2','dinner','latenight'].forEach(k => {
       const hasMeal = !!(merged[k] || (merged[k + '_imgs'] || []).length > 0);
       const el = document.getElementById('meal-saved-' + k);
-      if (el && hasMeal) {
-        el.textContent = '✓ 已儲存';
-        el.style.color = '#22c55e';
-        el.style.display = '';
+      if (el) {
+        if (hasMeal) {
+          el.textContent = '✓ 已儲存';
+          el.style.color = '#22c55e';
+          el.style.display = '';
+        } else {
+          el.style.display = 'none';
+        }
       }
     });
+    // 生活細節已儲存標記
     ['exType','exMin','exTime','water','sleep','poop','steps','lifeNote'].forEach(k => {
       const hasVal = !!(merged[k]);
       const el = document.getElementById('life-saved-' + k);
-      if (el && hasVal) {
-        el.textContent = '✓ 已儲存';
-        el.style.color = '#22c55e';
-        el.style.display = '';
+      if (el) {
+        if (hasVal) {
+          el.textContent = '✓ 已儲存';
+          el.style.color = '#22c55e';
+          el.style.display = '';
+        } else {
+          el.style.display = 'none';
+        }
       }
     });
   }, 50);
@@ -2406,13 +2426,13 @@ function notifyRD(day) {
   merged.notifiedAt = new Date().toISOString();
   merged.hasData = true;
   ss(`food_${currentUser.id}_${day}`, merged);
-  // 更新通知按鈕
+  // 更新通知按鈕（每次按都跳泡泡，就算已通知也要跳）
   const notifyBtn = document.getElementById('notify-btn-fixed');
   if (notifyBtn) {
     notifyBtn.classList.add('sent');
     notifyBtn.innerHTML = '✅ 已通知營養師';
-    notifyBtn.disabled = true;
   }
+  // 永遠跳泡泡讓學員知道有按到
   showToast('🎉 已通知營養師，等待回饋！');
   const rdId = currentUser.rd || 'tingxuan';
   sendPushToRd(rdId, `📋 ${currentUser.name} 上傳飲食紀錄`, `${currentUser.name} 已上傳 ${day} 的飲食日記，請上線查看！`);
