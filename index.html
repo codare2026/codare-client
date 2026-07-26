@@ -1281,6 +1281,16 @@ body {
     </div>
   </div>
   <div class="content" id="main-content"></div>
+  <div id="food-action-bar" style="display:none;position:fixed;bottom:60px;left:0;right:0;width:100%;padding:8px 16px;background:rgba(255,255,255,0.97);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:999;display:none;gap:8px;box-sizing:border-box">
+    <button id="save-btn-fixed" onclick="saveFoodDay(currentFoodDay)"
+      style="flex:1;padding:11px 8px;background:#fff;color:var(--primary);border:2px solid var(--primary);border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all 0.15s">
+      💾 儲存紀錄
+    </button>
+    <button id="notify-btn-fixed" onclick="notifyRD(currentFoodDay)"
+      style="flex:2;padding:11px 8px;border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none">
+      🍎 通知營養師
+    </button>
+  </div>
   <nav class="bottom-nav">
     <button class="nav-item active" id="nav-home" onclick="showPage('home')">
       <div class="nav-icon">🏠</div><div class="nav-label">首頁</div>
@@ -1575,6 +1585,9 @@ function showPage(page) {
   currentPage = page;
   currentFoodDay = null;
   currentProgressWeek = null;
+  // 隱藏飲食固定按鈕
+  const bar = document.getElementById('food-action-bar');
+  if (bar) bar.style.display = 'none';
   ['home','food','body','goals','menu','materials','inbox'].forEach(p => {
     const el = document.getElementById('nav-' + p);
     if (el) el.classList.toggle('active', p === page);
@@ -1844,6 +1857,27 @@ function openFoodDay(day) {
     ss(key, existing);
   }
   document.getElementById('main-content').innerHTML = renderFoodEntry(day);
+  // 顯示固定按鈕
+  const bar = document.getElementById('food-action-bar');
+  if (bar) {
+    bar.style.display = 'flex';
+    // 更新通知按鈕狀態
+    const food = gs(key) || {};
+    const notifyBtn = document.getElementById('notify-btn-fixed');
+    if (notifyBtn) {
+      if (food.notified) {
+        notifyBtn.innerHTML = '✅ 已通知營養師';
+        notifyBtn.style.background = 'var(--gray-200)';
+        notifyBtn.style.color = 'var(--gray-500)';
+        notifyBtn.disabled = true;
+      } else {
+        notifyBtn.innerHTML = '🍎 通知營養師';
+        notifyBtn.style.background = 'linear-gradient(135deg,var(--primary),var(--primary-dark))';
+        notifyBtn.style.color = '#fff';
+        notifyBtn.disabled = false;
+      }
+    }
+  }
   scrollToCurrentMeal();
 }
 
@@ -2108,17 +2142,7 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
   </div>
 
 ${lifeItems.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:12px">${lifeItems.map(x => `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:var(--gray-100);border-radius:20px;font-size:12px;color:var(--gray-600)">${x.icon} ${x.label}：${x.val}</span>`).join('')}</div>` : ''}
-<div style="height:120px"></div>
-<div style="position:fixed;bottom:0;left:0;right:0;width:100%;padding:12px 16px 24px;background:rgba(255,255,255,0.97);backdrop-filter:blur(10px);border-top:1px solid rgba(59,141,224,0.15);z-index:9999;display:flex;gap:8px;box-sizing:border-box">
-<button id="save-btn" onclick="saveFoodDay('${day}')"
-      style="flex:1;padding:11px 8px;background:#fff;color:var(--primary);border:2px solid var(--primary);border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all 0.15s">
-      💾 儲存紀錄
-    </button>
-    <button class="notify-btn ${notified ? 'sent' : ''}" id="notify-btn" onclick="notifyRD('${day}')"
-      style="flex:2;padding:11px 8px;border-radius:12px;font-size:13px;margin-top:0">
-      ${notified ? '✅ 已通知營養師' : '🍎 完成後按我通知營養師～'}
-    </button>
-  </div>
+<div style="height:80px"></div>
   ${stuReplySection}`;
 }
 
@@ -2325,10 +2349,10 @@ mealKeys.forEach(k => {
   ['exType','exMin','water','sleep','poop','steps','lifeNote','moodNote'].forEach(k => {
   localStorage.removeItem(`stu_draft_life_${currentUser.id}_${day}_${k}`);
 });
-const saveBtn = document.getElementById('save-btn');
-  if (saveBtn) {
-setTimeout(() => {
-    const saveBtn = document.getElementById('save-btn');
+  showToast('✅ 紀錄已儲存！');
+  // 更新固定按鈕狀態
+  setTimeout(() => {
+    const saveBtn = document.getElementById('save-btn-fixed');
     if (saveBtn) {
       saveBtn.style.background = 'linear-gradient(135deg,var(--primary),var(--primary-dark))';
       saveBtn.style.color = '#fff';
@@ -2338,15 +2362,6 @@ setTimeout(() => {
       saveBtn.style.opacity = '1';
     }
   }, 50);
-    saveBtn.style.color = '#fff';
-    saveBtn.style.border = '2px solid var(--primary)';
-    saveBtn.innerHTML = '✅ 已儲存';
-    saveBtn.disabled = true;
-    saveBtn.style.opacity = '1';
-  }
-  showToast('✅ 紀錄已儲存！');
-  // 重新渲染讓時間顯示出來
-  document.getElementById('main-content').innerHTML = renderFoodEntry(day);
   return merged;
 }
 function saveMealTime(day, mealKey, timeValue) {
@@ -2367,8 +2382,22 @@ function notifyRD(day) {
   merged.notifiedAt = new Date().toISOString();
   merged.hasData = true;
   ss(`food_${currentUser.id}_${day}`, merged);
-  const btn = document.getElementById('notify-btn');
-  if (btn) { btn.classList.add('sent'); btn.innerHTML = '✅ 已通知營養師'; }
+  // 更新固定按鈕狀態
+  const notifyBtn = document.getElementById('notify-btn-fixed');
+  if (notifyBtn) {
+    notifyBtn.innerHTML = '✅ 已通知營養師';
+    notifyBtn.style.background = 'var(--gray-200)';
+    notifyBtn.style.color = 'var(--gray-500)';
+    notifyBtn.disabled = true;
+  }
+  // 更新儲存按鈕
+  const saveBtn = document.getElementById('save-btn-fixed');
+  if (saveBtn) {
+    saveBtn.style.background = 'linear-gradient(135deg,var(--primary),var(--primary-dark))';
+    saveBtn.style.color = '#fff';
+    saveBtn.innerHTML = '✅ 已儲存';
+    saveBtn.disabled = true;
+  }
   showToast('🎉 已通知營養師，等待回饋！');
   const rdId = currentUser.rd || 'tingxuan';
   sendPushToRd(rdId, `📋 ${currentUser.name} 上傳飲食紀錄`, `${currentUser.name} 已上傳 ${day} 的飲食日記，請上線查看！`);
