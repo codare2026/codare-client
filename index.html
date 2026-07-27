@@ -2120,7 +2120,7 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
     <div class="life-grid">
   <div class="life-field"><label>運動形式 <span id="life-saved-exType" style="font-size:11px;color:#22c55e;font-weight:600;${saved.exType ? '' : 'display:none'}">✓ 已儲存</span></label><input type="text" id="l-ex" value="${lifeDraft('exType')}" placeholder="例：慢跑、重訓" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_exType',this.value)"></div>
   <div class="life-field"><label>運動時間（分鐘）<span id="life-saved-exMin" style="font-size:11px;color:#22c55e;font-weight:600;${saved.exMin ? '' : 'display:none'}">✓ 已儲存</span></label><input type="number" id="l-exmin" value="${lifeDraft('exMin')}" placeholder="30" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_exMin',this.value)"></div>
-  <div class="life-field"><label>運動時刻（幾點開始）<span id="life-saved-exTime" style="font-size:11px;color:#22c55e;font-weight:600;${saved.exTime ? '' : 'display:none'}">✓ 已儲存</span></label><input type="time" id="l-extime" value="${saved.exTime||''}" style="display:block;width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s;-webkit-appearance:none;appearance:none" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></div>
+  <div class="life-field"><label>運動時刻（幾點開始）<span id="life-saved-exTime" style="font-size:11px;color:#22c55e;font-weight:600;${saved.exTime ? '' : 'display:none'}">✓ 已儲存</span></label><input type="time" id="l-extime" value="${lifeDraft('exTime')}" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_exTime',this.value)" style="display:block;width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s;-webkit-appearance:none;appearance:none" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'"></div>
   <div class="life-field"><label>飲水量（ml）<span id="life-saved-water" style="font-size:11px;color:#22c55e;font-weight:600;${saved.water ? '' : 'display:none'}">✓ 已儲存</span></label><input type="number" id="l-water" value="${lifeDraft('water')}" placeholder="1500" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_water',this.value)"></div>
   <div class="life-field"><label>睡眠時間（小時）<span id="life-saved-sleep" style="font-size:11px;color:#22c55e;font-weight:600;${saved.sleep ? '' : 'display:none'}">✓ 已儲存</span></label><input type="number" id="l-sleep" value="${lifeDraft('sleep')}" placeholder="7" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_sleep',this.value)"></div>
   <div class="life-field"><label>排便次數<span id="life-saved-poop" style="font-size:11px;color:#22c55e;font-weight:600;${saved.poop ? '' : 'display:none'}">✓ 已儲存</span></label><input type="number" id="l-poop" value="${lifeDraft('poop')}" placeholder="1" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_poop',this.value)"></div>
@@ -2132,18 +2132,22 @@ const overallHTML = overallArr.length ? overallArr.map(fb => `
     <div class="life-field full" style="margin-top:8px">
       <label>今日心情 😊</label>
       <div style="margin-bottom:8px">
+        ${(() => {
+          const moodDraftVal = (() => { try { const v = localStorage.getItem(`stu_draft_life_${currentUser.id}_${day}_moodScore`); return v !== null ? Number(v) : (saved.moodScore !== undefined && saved.moodScore !== null ? Number(saved.moodScore) : null); } catch { return saved.moodScore !== undefined && saved.moodScore !== null ? Number(saved.moodScore) : null; } })();
+          return `
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);margin-bottom:6px;padding:0 2px">
           <span>😔 0 不好</span><span>😊 10 很好</span>
         </div>
         <div style="display:flex;gap:4px;justify-content:space-between">
           ${[0,1,2,3,4,5,6,7,8,9,10].map(n => {
-            const selected = (saved.moodScore !== undefined && saved.moodScore !== null) ? Number(saved.moodScore) === n : false;
+            const selected = moodDraftVal !== null ? moodDraftVal === n : false;
             const color = n <= 3 ? '#ef4444' : n <= 6 ? '#f59e0b' : '#22c55e';
             return `<button type="button" onclick="selectMood(${n})" id="mood-btn-${n}"
               style="flex:1;padding:7px 2px;border:2px solid ${selected ? color : 'var(--gray-200)'};border-radius:8px;background:${selected ? color : '#fff'};color:${selected ? '#fff' : 'var(--gray-500)'};font-size:13px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:inherit">${n}</button>`;
           }).join('')}
         </div>
-        <input type="hidden" id="l-mood" value="${saved.moodScore !== undefined ? saved.moodScore : ''}">
+        <input type="hidden" id="l-mood" value="${moodDraftVal !== null ? moodDraftVal : ''}">`;
+        })()}
       </div>
       <input type="text" id="l-mood-note" value="${lifeDraft('moodNote')}" placeholder="心情描述（可選）…" oninput="localStorage.setItem('stu_draft_life_${currentUser.id}_${day}_moodNote',this.value)" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;background:var(--gray-50);outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-200)'">
     </div>
@@ -2284,6 +2288,7 @@ function deleteStudentReply(day, idx) {
 
 function selectMood(score) {
   document.getElementById('l-mood').value = score;
+  try { localStorage.setItem(`stu_draft_life_${currentUser.id}_${currentFoodDay}_moodScore`, score); } catch {}
   [0,1,2,3,4,5,6,7,8,9,10].forEach(n => {
     const btn = document.getElementById('mood-btn-' + n);
     if (!btn) return;
@@ -2353,7 +2358,7 @@ mealKeys.forEach(k => {
   ['breakfast','snack1','lunch','snack2','dinner','latenight'].forEach(k => {
     localStorage.removeItem(`stu_draft_${currentUser.id}_${day}_${k}`);
   });
-  ['exType','exMin','water','sleep','poop','steps','lifeNote','moodNote'].forEach(k => {
+  ['exType','exMin','exTime','water','sleep','poop','steps','lifeNote','moodNote','moodScore'].forEach(k => {
   localStorage.removeItem(`stu_draft_life_${currentUser.id}_${day}_${k}`);
 });
   if (!silent) showToast('✅ 紀錄已儲存！');
