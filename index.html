@@ -2923,18 +2923,7 @@ function switchMenuPeriod(p) {
 }
 
 // ── MATERIALS ──
-const COURSES = [
-  { num: 1,  title: '認識熱量與熱量赤字' },
-  { num: 2,  title: '健檢報告解密' },
-  { num: 3,  title: '豆魚蛋肉類' },
-  { num: 4,  title: '全穀雜糧類' },
-  { num: 5,  title: '蔬菜水果類' },
-  { num: 6,  title: '油脂類' },
-  { num: 7,  title: '運動營養' },
-  { num: 8,  title: '外食技巧交戰守則' },
-  { num: 9,  title: '看懂營養標示／嘴饞點心不用怕' },
-  { num: 10, title: '保健品全攻略' }
-];
+// 課程列表改為動態：從營養師實際上傳的教材產生，不再預設固定 10 堂
 
 const FOOD_CATS = [
   { key: 'food_grain',   label: '全穀雜糧類', icon: '🍚', color: '#dbeafe', border: '#3b82f6' },
@@ -2959,32 +2948,32 @@ function renderMaterials() {
   const courseItems = activeItems.filter(item => item.category === 'course');
   const encyItemsAll = activeItems.filter(item => item.category !== 'course');
 
-  // ── Course tab HTML ──
-  const courseHTML = COURSES.map(c => {
-    const uploaded = courseItems.find(item => (item.catKey || item.desc) === `course_${c.num}`);
-    const hasLink = uploaded && uploaded.fileType === 'link' && uploaded.linkUrl;
-    const hasFile = uploaded && uploaded.fileData;
+  // ── Course tab HTML：改為動態清單，依營養師實際上傳的教材產生 ──
+  const sortedCourseItems = [...courseItems].sort((a,b) => (a.uploadedAt||0) - (b.uploadedAt||0));
+  const courseHTML = sortedCourseItems.map((item, idx) => {
+    const hasLink = item.fileType === 'link' && item.linkUrl;
+    const hasFile = item.fileData || item.fileUrl;
     const isClickable = hasLink || hasFile;
     const clickHandler = hasLink
-      ? `onclick="window.open('${uploaded.linkUrl}','_blank')"`
-      : hasFile ? `onclick="openEncyPreview_course(${c.num - 1})"` : `onclick="showToast('課程影片即將上線，敬請期待！')"`;
-
-    // 狀態 badge
-    const statusBadge = hasLink
+      ? `onclick="window.open('${item.linkUrl}','_blank')"`
+      : hasFile ? `onclick="openEncyPreview_course(${idx})"` : '';
+    const statusBadge = isClickable
       ? `<span style="background:var(--primary);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">▶ 可觀看</span>`
-      : hasFile
-      ? `<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">▶ 可觀看</span>`
       : `<span style="background:var(--gray-200);color:var(--gray-400);font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">即將上線</span>`;
-
+    const displayTitle = item.descLabel || item.title || `線上課程 ${idx+1}`;
     return `<div class="course-item" ${clickHandler} style="cursor:${isClickable?'pointer':'default'};${isClickable?'background:linear-gradient(135deg,#f0fdf4,#fff);border-left:3px solid var(--green);':''}">
-      <div class="course-num" style="background:${isClickable?'var(--primary)':'var(--gray-200)'};color:${isClickable?'#fff':'var(--gray-400)'};">${c.num}</div>
+      <div class="course-num" style="background:${isClickable?'var(--primary)':'var(--gray-200)'};color:${isClickable?'#fff':'var(--gray-400)'};">${idx+1}</div>
       <div style="flex:1;min-width:0">
-        <div class="course-title" style="color:${isClickable?'var(--gray-800)':'var(--gray-400)'}">線上課程 ${c.num}｜${c.title}</div>
+        <div class="course-title" style="color:${isClickable?'var(--gray-800)':'var(--gray-400)'}">${displayTitle}</div>
         <div style="margin-top:4px">${statusBadge}</div>
       </div>
       <div style="font-size:20px;color:${isClickable?'var(--primary)':'var(--gray-300)'}">›</div>
     </div>`;
   }).join('');
+  // 課程區塊：有課程時列表下方顯示期待文字，沒有課程時顯示空狀態
+  const courseSectionHTML = sortedCourseItems.length
+    ? `${courseHTML}<div style="text-align:center;padding:16px 0 4px;color:var(--gray-400);font-size:13px">🎬 敬請期待更多精彩內容！</div>`
+    : `<div class="empty-state"><div class="empty-icon">🎥</div><p>營養師尚未上傳課程影片<br>敬請期待更多精彩內容！</p></div>`;
 
   // ── Ency tab HTML ──
   let encyHTML = '';
@@ -3062,27 +3051,11 @@ function renderMaterials() {
   </div>
   ${currentMatTab === 'courses' ? `
   <div class="notice notice-blue">📘 綠色 ▶ 表示已可觀看</div>
-  <div class="card">${courseHTML}</div>
+  <div class="card">${courseSectionHTML}</div>
   ` : `
   ${currentFoodCat ? '' : '<div class="notice notice-blue">📋 點選分類查看教材</div>'}
   <div class="card">${encyHTML}</div>
   `}`;
-}
-
-function openEncyPreview_course(courseIdx) {
-  // Find matching uploaded course item
-  const course = COURSES[courseIdx];
-  if (!course) return;
-  const rawItems = gs(`ency_${currentUser.id}`) || [];
-  const item = rawItems.find(i => i.category === 'course' && i.desc === `course_${course.num}`);
-  if (!item || !item.fileData) { showToast('此課程尚無附件'); return; }
-  if (item.fileType === 'pdf') {
-    const w = window.open();
-    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${src}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
-  } else {
-    const w = window.open();
-    if (w) w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
-  }
 }
 
 function switchMatTab(tab) {
@@ -3545,16 +3518,24 @@ function lbNav(dir) {
   renderLightbox();
 }
 
-function openEncyPreview_course(courseIdx) {
-  const course = COURSES[courseIdx];
-  if (!course) return;
+function openEncyPreview_course(idx) {
+  const now = Date.now();
+  const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
   const rawItems = gs(`ency_${currentUser.id}`) || [];
-  const item = rawItems.find(i => i.category === 'course' && i.desc === `course_${course.num}`);
+  const activeCourseItems = rawItems
+    .filter(i => i.category === 'course' && (!i.uploadedAt || (now - i.uploadedAt) <= ONE_YEAR))
+    .sort((a,b) => (a.uploadedAt||0) - (b.uploadedAt||0));
+  const item = activeCourseItems[idx];
   if (!item) { showToast('課程影片即將上線，敬請期待！'); return; }
   if (item.linkUrl) { window.open(item.linkUrl, '_blank'); return; }
-  if (item.fileData) {
+  const src = item.fileUrl || item.fileData;
+  if (!src) { showToast('此課程尚無附件'); return; }
+  if (item.fileType === 'pdf') {
     const w = window.open();
-    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${item.fileData}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
+    if (w) w.document.write(`<html><body style="margin:0"><iframe src="${src}" width="100%" height="100%" style="border:none;position:fixed;inset:0"></iframe></body></html>`);
+  } else {
+    const w = window.open();
+    if (w) w.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
   }
 }
 </script>
