@@ -49,10 +49,12 @@ function gs(key) {
 }
 
 // ── 寫入（cache + localStorage + Supabase 非同步） ──
+const _inFlightWrites = new Set(); // 正在寫入 Supabase 過程中的 key，防止背景同步用舊資料蓋掉剛寫入的新資料
 function ss(key, val) {
   _cache[key] = val;
   try { if (val === null) localStorage.removeItem('cd_' + key); else localStorage.setItem('cd_' + key, JSON.stringify(val)); } catch {}
-  sbWrite(key, val);
+  _inFlightWrites.add(key);
+  sbWrite(key, val).finally(() => { _inFlightWrites.delete(key); });
 }
 
 const _pendingWrites = {};
@@ -170,6 +172,7 @@ async function warmCache(userId) {
 rows.forEach(({ key, value }) => {
     if (!key) return;
     if (_pendingWrites[key]) return;
+    if (_inFlightWrites.has(key)) return; // 該 key 正在寫入中，跳過避免用舊資料覆蓋剛寫入的新資料
     _cache[key] = value;
     try { localStorage.setItem('cd_' + key, JSON.stringify(value)); } catch {}
   });
